@@ -23,7 +23,7 @@ assert len(PUZZLE_DATA) > 0, "Puzzle is empty"
 class Obj(Enum):
 	HORSE = -1
 	SPACE = 0
-	WALL = 1
+	WATER = 1
 	# CHERRY = 2
 	# APPLE = 3
 	# BEES = 4
@@ -59,7 +59,7 @@ for y, row in enumerate(PUZZLE_DATA):
 	r = []
 
 	for x, tile in enumerate(row):
-		if tile == "#": r.append(Obj.WALL)
+		if tile == "#": r.append(Obj.WATER)
 		elif (tile == "O" or tile == "o"):
 			assert START_POS is None, "Can't have multiple start positions"
 			r.append(Obj.HORSE)
@@ -85,7 +85,7 @@ def get_tile(x, y=None):
 # Check if a point contains ANY type of wall
 def is_wall(x, y=None):
 	pos = to_point(x, y)
-	return pos in placed_walls or get_tile(pos) == Obj.WALL
+	return pos in placed_walls or get_tile(pos) == Obj.WATER
 
 # Check if this is an exit tile on the edge of the map
 def is_exit(x, y=None):
