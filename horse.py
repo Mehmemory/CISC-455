@@ -20,12 +20,13 @@ assert len(PUZZLE_DATA) > 0, "Puzzle is empty"
 # =========================== #
 
 # Classes and enums
-
 class Obj(Enum):
+	HORSE = -1
 	SPACE = 0
 	WALL = 1
-	# APPLE = 2
-	# BEES = 3 
+	# CHERRY = 2
+	# APPLE = 3
+	# BEES = 4
 
 	def __str__(self):
 		return self.name
@@ -59,9 +60,12 @@ for y, row in enumerate(PUZZLE_DATA):
 
 	for x, tile in enumerate(row):
 		if tile == "#": r.append(Obj.WALL)
-		else:
-			if tile == "O" or tile == "o": START_POS = Point(x, y)
-			r.append(Obj.SPACE)
+		elif (tile == "O" or tile == "o"):
+			assert START_POS is None, "Can't have multiple start positions"
+			r.append(Obj.HORSE)
+			START_POS = Point(x, y) 
+		else: r.append(Obj.SPACE)
+			
 	PUZZLE.append(r)
 
 assert START_POS is not None, "No start position provided!"
@@ -128,5 +132,4 @@ print(f"(1, 1) is still wall: {is_wall(1, 1)}")
 print(f"(1, 1) + (1, 3) = {Point(1, 1) + Point(1, 3)}")
 print(f"(1, 1) + (1, 4) = {Point(1, 1).move(1, 4)}")
 print(f"Walls: {list_walls()}")
-
 print_puzzle()
