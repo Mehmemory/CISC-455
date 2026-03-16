@@ -1,4 +1,5 @@
 from enum import Enum
+from collections import deque
 import random
 
 # Define the puzzle here
@@ -25,9 +26,9 @@ class Obj(Enum):
 	HORSE = -1
 	SPACE = 0
 	WATER = 1
-	# CHERRY = 2
-	# APPLE = 3
-	# BEES = 4
+	CHERRY = 2
+	APPLE = 3
+	BEES = 4
 
 	def __str__(self):
 		return self.name
@@ -135,11 +136,89 @@ print(f"Walls: {list_walls()}")
 print_puzzle()
 
 
-# =========================== #
+# ===========================  FITNESS CALCULATION FUNCTIONS =========================== #
+
+def on_edge(pos):
+	# returns true if a given pos is on the edge of the puzzle
+	return pos.x == 0 or pos.y == 0 or pos.x == PUZZLE_WIDTH-1 or pos.y == PUZZLE_HEIGHT-1
+
+def floodfill(puzzleLayout):
+	# returns a 2d array the coorisponds to how many steps it takes to reach each tile of the puzzleLayout
+	# -1 means the tile is unreachable:
+
+	results = [[-1 for _ in range(PUZZLE_HEIGHT)] for _ in range(PUZZLE_WIDTH)]	# initialize the array with all -1's
+	queue = deque()												# stores which tile to check next
+	results[START_POS.x][START_POS.y] = 0	
+	if not on_edge(START_POS):
+		queue.append((START_POS, 0))		# add startpos to the queue and note that it takes 0 steps to get there
+
+	neighbors = [Point(-1,0), Point(1,0), Point(0,-1), Point(0,1)]
+	while queue:
+		cur = queue.popleft()
+		for p in neighbors:	# checks each neighbor around current
+			next = cur[0]+p
+
+			# if the tile hasn't been checked yet and it's not water...
+			if results[next.x][next.y] == -1 and puzzleLayout[next.x][next.y] != Obj.WATER:
+
+				results[next.x][next.y] = cur[1]+1	# update results
+				if not on_edge(next):	# add to queue if its not on the edge
+					queue.append((next, cur[1]+1))
+
+	return results
+
+def get_fitness(walls, puzzle, defaultEscapes):
+	# Calculates fitness based on the number of reachable exits and how long they take to get them compared to a default board
+	# If the horse is fully enclosed, adds additional fitness for each tile and item enclosed
+	# defaultEscapes is a tuple list with 		[0] = coordinates       and 	[1] = depth
+
+	# create a temporary puzzle layout that counts walls as water (since they function the same)
+	combinedPuzzle = puzzle
+	for i in walls:
+		combinedPuzzle[walls[i].x][walls[i].y] = 1
+	
+	# run floodfill on the board:
+	flood = floodfill(combinedPuzzle)
+	
+	# Subtract fitness based on how many escapes possible and how long (compared to default) it takes to get to each
+	for i in defaultEscapes:
+		pos, defaultDepth = defaultEscapes[i]
+		if flood[pos.x][pos.y] == -1:
+			fitness+=1
+		else:
+			diff = flood[pos.x][pos.y] - defaultDepth	# compares depths
+			fitness += 1 - (0.5)**(diff)
+	
+	# for solutions with no escapes, add the number of enclosed tiles to the fitness:
+	if fitness == len(defaultEscapes):
+		for x in range(PUZZLE_WIDTH):
+			for y in range(PUZZLE_HEIGHT):	# iterate over each cell
+				if flood[x][y] != 0:		# if that cell is enclosed add fitness
+					fitness+=1
+					# add additional fitness for cherries, apples, bees
+					if combinedPuzzle[x][y] == Obj.CHERRY:
+						fitness+=3
+					elif combinedPuzzle[x][y] == Obj.APPLE:
+						fitness+=10
+					elif combinedPuzzle[x][y] == Obj.BEES:
+						fitness-=5
+
+	return fitness**FITNESS_EXPONENT
+
+# ===========================  END OF FITNESS CALCULATION FUNCTIONS =========================== #
 
 POPULATION_SIZE = 1000
 MATING_POOL_SIZE = 750	# allow all but the worst of the worst
 MAX_GENERATIONS = 10
+FITNESS_EXPONENT = 2	# scales fitness
+
+# Find default escapes (needed for fitness evaluation):
+defaultExits = []
+defaultFlood = floodfill(PUZZLE_DATA)
+for x in range(PUZZLE_WIDTH):
+	for y in range(PUZZLE_HEIGHT):
+		if on_edge(Point(x,y)):
+			defaultExits.append((Point(x,y), defaultFlood[x][y]))
 
 population = [] 	# dictionary with { "walls": [], and "fitness": n }
 generation = 0
@@ -166,11 +245,6 @@ def tournament():
 
 	# Choose a bunch of candidates based on their weight of being picked
 	return random.choices(candidates, weights=weights, k=MATING_POOL_SIZE)
-
-
-#	Temporary
-def get_fitness(list_of_walls):
-	return 0
 
 
 # 	Evolve!
