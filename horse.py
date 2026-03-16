@@ -1,4 +1,5 @@
 from enum import Enum
+import random
 
 # Define the puzzle here
 # Wall is #, Space is -, Start pos is O
@@ -48,6 +49,10 @@ class Point:
 
 # =========================== #
 
+# List of Points representing walls placed by the algorithm, should not exceed MAX_WALLS
+placed_walls = set()		# walls have been placed here
+valid_walls = []			# walls CAN be placed here
+
 # Constants and puzzle creation
 PUZZLE = []
 PUZZLE_HEIGHT = len(PUZZLE_DATA)
@@ -64,7 +69,9 @@ for y, row in enumerate(PUZZLE_DATA):
 			assert START_POS is None, "Can't have multiple start positions"
 			r.append(Obj.HORSE)
 			START_POS = Point(x, y) 
-		else: r.append(Obj.SPACE)
+		else:
+			r.append(Obj.SPACE)
+			valid_walls.append(Point(x, y))
 			
 	PUZZLE.append(r)
 
@@ -107,13 +114,6 @@ def print_puzzle():
 
 # =========================== #
 
-# Stuff for the algorithm to mess with ig
-
-# List of Points representing walls placed by the algorithm, should not exceed MAX_WALLS
-placed_walls = set()
-
-# =========================== #
-
 # TESTS TO MAKE SURE THIS WORKS
 print(f"Puzzle size is {PUZZLE_WIDTH} x {PUZZLE_HEIGHT}")
 print(f"Start position is {START_POS}")
@@ -133,3 +133,51 @@ print(f"(1, 1) + (1, 3) = {Point(1, 1) + Point(1, 3)}")
 print(f"(1, 1) + (1, 4) = {Point(1, 1).move(1, 4)}")
 print(f"Walls: {list_walls()}")
 print_puzzle()
+
+
+# =========================== #
+
+POPULATION_SIZE = 1000
+MATING_POOL_SIZE = 750	# allow all but the worst of the worst
+MAX_GENERATIONS = 10
+
+population = [] 	# dictionary with { "walls": [], and "fitness": n }
+generation = 0
+	
+	
+#  Create a random solution that just picks from random available wall positions
+def random_solution():
+	random_wall_positions = random.sample(valid_walls, MAX_WALLS)
+	return { "walls": random_wall_positions, "fitness": get_fitness(random_wall_positions) }
+
+#	Initialize the population with random solutions
+for i in range(POPULATION_SIZE):
+	population.append(random_solution())
+
+
+#	Selection via linear ranking
+def tournament():
+
+	# Sort by fitness. First element is the lowest, last element is the highest
+	candidates = sorted(population, key = lambda x: x["fitness"])
+	
+	# Get the weight of each index ([1, 2, 3, 4, 5, ... n-1, n])
+	weights = range(1, len(candidates) + 1)
+
+	# Choose a bunch of candidates based on their weight of being picked
+	return random.choices(candidates, weights=weights, k=MATING_POOL_SIZE)
+
+
+#	Temporary
+def get_fitness(list_of_walls):
+	return 0
+
+
+# 	Evolve!
+while generation < MAX_GENERATIONS:
+	generation += 1
+
+	mating_pool = tournament()
+
+
+	# do crossover, mutation, etc
