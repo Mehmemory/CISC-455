@@ -95,11 +95,6 @@ def is_wall(x, y=None):
 	pos = to_point(x, y)
 	return pos in placed_walls or get_tile(pos) == Obj.WATER
 
-# Check if this is an exit tile on the edge of the map
-def is_exit(x, y=None):
-	pos = to_point(x, y)
-	return (pos.x == 0 or pos.y == 0 or pos.x == PUZZLE_WIDTH - 1 or pos.y == PUZZLE_HEIGHT - 1) and not is_wall(pos)
-
 # Add/remove wall
 def add_wall(x, y=None): placed_walls.add(to_point(x, y))
 def remove_wall(x, y=None): placed_walls.remove(to_point(x, y))
