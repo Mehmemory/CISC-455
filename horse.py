@@ -1,6 +1,7 @@
 from enum import Enum
 from collections import deque
 import random
+import copy
 
 # Define the puzzle here
 # Wall is #, Space is -, Start pos is O
@@ -22,7 +23,7 @@ assert len(PUZZLE_DATA) > 0, "Puzzle is empty"
 # =========================== #
 
 # Classes and enums
-class Obj(Enum):
+class TileType(Enum):
 	HORSE = -1
 	SPACE = 0
 	WATER = 1
@@ -37,9 +38,10 @@ class Point:
 	def __init__(self, x, y):
 		self.x = x
 		self.y = y
-	
+
 	def __add__(self, other): return Point(self.x + other.x, self.y + other.y)
 	def __str__(self): return f"({self.x}, {self.y})"
+	def __repr__(self): return self.__str__()
 	def __eq__(self, other): return self.x == other.x and self.y == other.y
 	def __hash__(self): return hash((self.x, self.y))
 
@@ -65,15 +67,15 @@ for y, row in enumerate(PUZZLE_DATA):
 	r = []
 
 	for x, tile in enumerate(row):
-		if tile == "#": r.append(Obj.WATER)
+		if tile == "#": r.append(TileType.WATER)
 		elif (tile == "O" or tile == "o"):
 			assert START_POS is None, "Can't have multiple start positions"
-			r.append(Obj.HORSE)
-			START_POS = Point(x, y) 
+			r.append(TileType.HORSE)
+			START_POS = Point(x, y)
 		else:
-			r.append(Obj.SPACE)
+			r.append(TileType.SPACE)
 			valid_walls.append(Point(x, y))
-			
+
 	PUZZLE.append(r)
 
 assert START_POS is not None, "No start position provided!"
@@ -93,7 +95,7 @@ def get_tile(x, y=None):
 # Check if a point contains ANY type of wall
 def is_wall(x, y=None):
 	pos = to_point(x, y)
-	return pos in placed_walls or get_tile(pos) == Obj.WATER
+	return pos in placed_walls or get_tile(pos) == TileType.WATER
 
 # Add/remove wall
 def add_wall(x, y=None): placed_walls.add(to_point(x, y))
@@ -101,9 +103,9 @@ def remove_wall(x, y=None): placed_walls.remove(to_point(x, y))
 def list_walls(): return " ".join(map(str, placed_walls))
 
 # Print the puzzle including placed walls
-def print_puzzle():
+def print_puzzle(walls=placed_walls):
 	puzzle_str = PUZZLE_DATA.copy()
-	for p in placed_walls:
+	for p in walls:
 		row = puzzle_str[p.y]
 		puzzle_str[p.y] = row[: p.x] + "@" + row[p.x + 1 :]
 	print("\n".join(puzzle_str))
@@ -145,7 +147,7 @@ def floodfill(puzzleLayout):
 
 	results = [[-1 for _ in range(PUZZLE_WIDTH)] for _ in range(PUZZLE_HEIGHT)]	# initialize the array with all -1's
 	queue = deque()												# stores which tile to check next
-	results[START_POS.y][START_POS.x] = 0	
+	results[START_POS.y][START_POS.x] = 0
 	if not on_edge(START_POS):
 		queue.append((START_POS, 0))		# add startpos to the queue and note that it takes 0 steps to get there
 
@@ -156,7 +158,7 @@ def floodfill(puzzleLayout):
 			next = cur[0]+p
 
 			# if the tile hasn't been checked yet and it's not water...
-			if results[next.y][next.x] == -1 and puzzleLayout[next.y][next.x] != Obj.WATER:
+			if results[next.y][next.x] == -1 and puzzleLayout[next.y][next.x] != TileType.WATER:
 
 				results[next.y][next.x] = cur[1]+1	# update results
 				if not on_edge(next):	# add to queue if its not on the edge
@@ -173,11 +175,11 @@ def get_fitness(walls, puzzle, defaultEscapes):
 	fitness = 0
 	combinedPuzzle = puzzle
 	for w in walls:
-		combinedPuzzle[w.y][w.x] = Obj.WATER
-	
+		combinedPuzzle[w.y][w.x] = TileType.WATER
+
 	# run floodfill on the board:
 	flood = floodfill(combinedPuzzle)
-	
+
 	# Subtract fitness based on how many escapes possible and how long (compared to default) it takes to get to each
 	for pos, defaultDepth in defaultEscapes:
 		if flood[pos.y][pos.x] == -1:
@@ -185,7 +187,7 @@ def get_fitness(walls, puzzle, defaultEscapes):
 		else:
 			diff = flood[pos.y][pos.x] - defaultDepth	# compares depths
 			fitness += 1 - (0.5)**(diff)
-	
+
 	# for solutions with no escapes, add the number of enclosed tiles to the fitness:
 	if fitness == len(defaultEscapes):
 		for y in range(PUZZLE_HEIGHT):
@@ -193,11 +195,11 @@ def get_fitness(walls, puzzle, defaultEscapes):
 				if flood[y][x] != 0:		# if that cell is enclosed add fitness
 					fitness+=1
 					# add additional fitness for cherries, apples, bees
-					if combinedPuzzle[y][x] == Obj.CHERRY:
+					if combinedPuzzle[y][x] == TileType.CHERRY:
 						fitness+=3
-					elif combinedPuzzle[y][x] == Obj.APPLE:
+					elif combinedPuzzle[y][x] == TileType.APPLE:
 						fitness+=10
-					elif combinedPuzzle[y][x] == Obj.BEES:
+					elif combinedPuzzle[y][x] == TileType.BEES:
 						fitness-=5
 
 	return fitness**FITNESS_EXPONENT
@@ -212,30 +214,25 @@ for y in range(PUZZLE_HEIGHT):
 
 # ===========================  END OF FITNESS CALCULATION FUNCTIONS =========================== #
 
-POPULATION_SIZE = 0
+POPULATION_SIZE = 100
 MATING_POOL_SIZE = 7	# allow all but the worst of the worst
 MAX_GENERATIONS = 10
+MUTATION_DISPLACEMENT_RADIUS = 2
+MUTATION_RATE = 0.2 # probablity for an individual wall to change its position
 
-population = [] 	# dictionary with { "walls": [], and "fitness": n }
-generation = 0
-	
-	
+
 #  Create a random solution that just picks from random available wall positions
 def random_solution():
 	random_wall_positions = random.sample(valid_walls, MAX_WALLS)
 	return { "walls": random_wall_positions, "fitness": get_fitness(random_wall_positions, PUZZLE, defaultExits) }
 
-#	Initialize the population with random solutions
-for i in range(POPULATION_SIZE):
-	population.append(random_solution())
-
 
 #	Selection via linear ranking
-def tournament():
+def tournament(population):
 
 	# Sort by fitness. First element is the lowest, last element is the highest
 	candidates = sorted(population, key = lambda x: x["fitness"])
-	
+
 	# Get the weight of each index ([1, 2, 3, 4, 5, ... n-1, n])
 	weights = range(1, len(candidates) + 1)
 
@@ -243,11 +240,67 @@ def tournament():
 	return random.choices(candidates, weights=weights, k=MATING_POOL_SIZE)
 
 
-# 	Evolve!
-while generation < MAX_GENERATIONS:
-	generation += 1
+def displace_mutation(solution):
+	# TODO: convert this to ES based mutation with varying displacement radius
 
-	mating_pool = tournament()
+	new_walls = []
+
+	occupied_walls = set(solution["walls"])
+
+	for wall in solution["walls"]:
+		mutate_prob = random.random()
+
+		if mutate_prob >= MUTATION_RATE:
+			new_walls.append(wall)
+			continue
+
+		possible_positions = []
+		for i in range(-MUTATION_DISPLACEMENT_RADIUS, MUTATION_DISPLACEMENT_RADIUS+1):
+			for j in range(-MUTATION_DISPLACEMENT_RADIUS, MUTATION_DISPLACEMENT_RADIUS+1):
+				new_wall = Point(wall.x + i, wall.y + j)
+				if new_wall in valid_walls and new_wall not in occupied_walls:
+					possible_positions.append(new_wall)
+
+		displaced_wall = random.choice(possible_positions)
+		new_walls.append(displaced_wall)
+		occupied_walls.remove(wall)
+		occupied_walls.add(displaced_wall)
+
+	return { "walls": new_walls, "fitness": get_fitness(new_walls, PUZZLE, defaultExits) }
 
 
-	# do crossover, mutation, etc
+def main():
+	population = [random_solution() for _ in range(POPULATION_SIZE)] 	# dictionary with { "walls": [], and "fitness": n }
+	generation = 0
+
+	# 	Evolve!
+	while generation < MAX_GENERATIONS:
+		generation += 1
+
+		offspring = []
+
+		mating_pool = tournament(population)
+
+		for i in range(len(mating_pool)):
+			solution = mating_pool[i]
+			offspring.append(displace_mutation(solution))
+			print_puzzle(offspring[-1]["walls"])
+			print(f"Fitness: {offspring[-1]["fitness"]}")
+
+
+		population = offspring
+
+		# do crossover, mutation, etc
+
+	population = sorted(population, key = lambda x: x["fitness"])
+	fitness = list(map(lambda x: x["fitness"], population))
+
+	print("===========================")
+	print("Best Solution:")
+	print_puzzle(population[0]["walls"])
+	print(f"Fitness: {population[0]["fitness"]}")
+	print("===========================")
+
+
+if __name__ == '__main__':
+    main()
