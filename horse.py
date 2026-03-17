@@ -133,6 +133,8 @@ print_puzzle()
 
 # ===========================  FITNESS CALCULATION FUNCTIONS =========================== #
 
+FITNESS_EXPONENT = 2	# scales fitness
+
 def on_edge(pos):
 	# returns true if a given pos is on the edge of the puzzle
 	return pos.x == 0 or pos.y == 0 or pos.x == PUZZLE_WIDTH-1 or pos.y == PUZZLE_HEIGHT-1
@@ -141,9 +143,9 @@ def floodfill(puzzleLayout):
 	# returns a 2d array the coorisponds to how many steps it takes to reach each tile of the puzzleLayout
 	# -1 means the tile is unreachable:
 
-	results = [[-1 for _ in range(PUZZLE_HEIGHT)] for _ in range(PUZZLE_WIDTH)]	# initialize the array with all -1's
+	results = [[-1 for _ in range(PUZZLE_WIDTH)] for _ in range(PUZZLE_HEIGHT)]	# initialize the array with all -1's
 	queue = deque()												# stores which tile to check next
-	results[START_POS.x][START_POS.y] = 0	
+	results[START_POS.y][START_POS.x] = 0	
 	if not on_edge(START_POS):
 		queue.append((START_POS, 0))		# add startpos to the queue and note that it takes 0 steps to get there
 
@@ -154,9 +156,9 @@ def floodfill(puzzleLayout):
 			next = cur[0]+p
 
 			# if the tile hasn't been checked yet and it's not water...
-			if results[next.x][next.y] == -1 and puzzleLayout[next.x][next.y] != Obj.WATER:
+			if results[next.y][next.x] == -1 and puzzleLayout[next.y][next.x] != Obj.WATER:
 
-				results[next.x][next.y] = cur[1]+1	# update results
+				results[next.y][next.x] = cur[1]+1	# update results
 				if not on_edge(next):	# add to queue if its not on the edge
 					queue.append((next, cur[1]+1))
 
@@ -168,52 +170,51 @@ def get_fitness(walls, puzzle, defaultEscapes):
 	# defaultEscapes is a tuple list with 		[0] = coordinates       and 	[1] = depth
 
 	# create a temporary puzzle layout that counts walls as water (since they function the same)
+	fitness = 0
 	combinedPuzzle = puzzle
-	for i in walls:
-		combinedPuzzle[walls[i].x][walls[i].y] = 1
+	for w in walls:
+		combinedPuzzle[w.y][w.x] = Obj.WATER
 	
 	# run floodfill on the board:
 	flood = floodfill(combinedPuzzle)
 	
 	# Subtract fitness based on how many escapes possible and how long (compared to default) it takes to get to each
-	for i in defaultEscapes:
-		pos, defaultDepth = defaultEscapes[i]
-		if flood[pos.x][pos.y] == -1:
+	for pos, defaultDepth in defaultEscapes:
+		if flood[pos.y][pos.x] == -1:
 			fitness+=1
 		else:
-			diff = flood[pos.x][pos.y] - defaultDepth	# compares depths
+			diff = flood[pos.y][pos.x] - defaultDepth	# compares depths
 			fitness += 1 - (0.5)**(diff)
 	
 	# for solutions with no escapes, add the number of enclosed tiles to the fitness:
 	if fitness == len(defaultEscapes):
-		for x in range(PUZZLE_WIDTH):
-			for y in range(PUZZLE_HEIGHT):	# iterate over each cell
-				if flood[x][y] != 0:		# if that cell is enclosed add fitness
+		for y in range(PUZZLE_HEIGHT):
+			for x in range(PUZZLE_WIDTH):	# iterate over each cell
+				if flood[y][x] != 0:		# if that cell is enclosed add fitness
 					fitness+=1
 					# add additional fitness for cherries, apples, bees
-					if combinedPuzzle[x][y] == Obj.CHERRY:
+					if combinedPuzzle[y][x] == Obj.CHERRY:
 						fitness+=3
-					elif combinedPuzzle[x][y] == Obj.APPLE:
+					elif combinedPuzzle[y][x] == Obj.APPLE:
 						fitness+=10
-					elif combinedPuzzle[x][y] == Obj.BEES:
+					elif combinedPuzzle[y][x] == Obj.BEES:
 						fitness-=5
 
 	return fitness**FITNESS_EXPONENT
 
-# ===========================  END OF FITNESS CALCULATION FUNCTIONS =========================== #
-
-POPULATION_SIZE = 1000
-MATING_POOL_SIZE = 750	# allow all but the worst of the worst
-MAX_GENERATIONS = 10
-FITNESS_EXPONENT = 2	# scales fitness
-
 # Find default escapes (needed for fitness evaluation):
 defaultExits = []
-defaultFlood = floodfill(PUZZLE_DATA)
-for x in range(PUZZLE_WIDTH):
-	for y in range(PUZZLE_HEIGHT):
-		if on_edge(Point(x,y)):
-			defaultExits.append((Point(x,y), defaultFlood[x][y]))
+defaultFlood = floodfill(PUZZLE)
+for y in range(PUZZLE_HEIGHT):
+	for x in range(PUZZLE_WIDTH):
+		if on_edge(Point(x,y)) and defaultFlood[y][x] != -1:
+			defaultExits.append((Point(x,y), defaultFlood[y][x]))
+
+# ===========================  END OF FITNESS CALCULATION FUNCTIONS =========================== #
+
+POPULATION_SIZE = 0
+MATING_POOL_SIZE = 7	# allow all but the worst of the worst
+MAX_GENERATIONS = 10
 
 population = [] 	# dictionary with { "walls": [], and "fitness": n }
 generation = 0
@@ -222,7 +223,7 @@ generation = 0
 #  Create a random solution that just picks from random available wall positions
 def random_solution():
 	random_wall_positions = random.sample(valid_walls, MAX_WALLS)
-	return { "walls": random_wall_positions, "fitness": get_fitness(random_wall_positions) }
+	return { "walls": random_wall_positions, "fitness": get_fitness(random_wall_positions, PUZZLE, defaultExits) }
 
 #	Initialize the population with random solutions
 for i in range(POPULATION_SIZE):
