@@ -54,7 +54,7 @@ class Point:
 
 # List of Points representing walls placed by the algorithm, should not exceed MAX_WALLS
 placed_walls = set()		# walls have been placed here
-valid_walls = []			# walls CAN be placed here
+valid_walls = []		# walls CAN be placed here
 
 # Constants and puzzle creation
 PUZZLE = []
@@ -308,7 +308,7 @@ def displace_mutation(solution):
 		for i in range(-MUTATION_DISPLACEMENT_RADIUS, MUTATION_DISPLACEMENT_RADIUS+1):
 			for j in range(-MUTATION_DISPLACEMENT_RADIUS, MUTATION_DISPLACEMENT_RADIUS+1):
 				new_wall = Point(wall.x + i, wall.y + j)
-				if new_wall in valid_walls and new_wall not in occupied_walls:
+				if 0 <= new_wall.x < PUZZLE_WIDTH and 0 <= new_wall.y < PUZZLE_HEIGHT and PUZZLE_DATA[new_wall.y][new_wall.x] == '-' and new_wall not in occupied_walls:
 					possible_positions.append(new_wall)
 
 		displaced_wall = random.choice(possible_positions)
