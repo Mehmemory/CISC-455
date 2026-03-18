@@ -13,19 +13,7 @@ class PuzzleSolver(ABC):
         pass
 
     @abstractmethod
-    def run_generation(self):
-        pass
-
-    @abstractmethod
-    def fitness(self, solution):
-        pass
-
-    @abstractmethod
-    def mutate(self, solution):
-        pass
-
-    @abstractmethod
-    def crossover(self, *solutions):
+    def run_generation(self, mutate, fitness, crossover):
         pass
 
     @abstractmethod

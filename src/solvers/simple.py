@@ -15,9 +15,68 @@ class SimpleSolutionStats:
         self.cherry_count = cherry_count
         self.bees_count = bees_count
 
+def fitness(solver, solution):
+    # Calculates fitness based on the number of reachable exits and how long they take to get them compared to a default board
+    # If the horse is fully enclosed, adds additional fitness for each tile and item enclosed
+    # defaultEscapes is a tuple list with 		[0] = coordinates       and 	[1] = depth
+
+    fitness = 0
+
+    # run flood fill on the board:
+    flood, stats = solver._flood_fill(solution)
+
+    # print("\n".join([" ".join([chr(flood[j][i] + ord("0")) if flood[j][i] != -1 else "X" for j in range(solver.puzzle.num_cols)]) for i in range(solver.puzzle.num_rows)]))
+
+    # Subtract fitness based on how many escapes possible and how long (compared to default) it takes to get to each
+    for pos, dist in solver._default_exits:
+        if flood[pos.x][pos.y] == -1:
+            fitness += 1
+        else:
+            diff = flood[pos.x][pos.y] - dist # compares distance
+            fitness += 1 - (0.5)**(diff)
+            # print(pos, dist, fitness, dist, flood[pos.x][pos.y])
+
+    # for solutions with no escapes, add the number of enclosed tiles to the fitness:
+    if fitness == len(solver._default_exits):
+        fitness += stats.tile_count + 3 * stats.cherry_count + 10 * stats.apple_count + 5 * stats.bees_count
+
+    return fitness**FITNESS_EXPONENT
+
+def mutate(solver, solution):
+    # TODO: convert this to ES based mutation with varying displacement radius
+    new_solution = []
+
+    occupied_walls = copy.deepcopy(solution)
+
+    for wall in solution:
+        if random.random() >= solver.individual_mutation_rate:
+            new_solution.append(wall)
+            continue
+
+        possible_positions = []
+        for i in range(-MUTATION_DISPLACEMENT_RADIUS, MUTATION_DISPLACEMENT_RADIUS+1):
+            for j in range(-MUTATION_DISPLACEMENT_RADIUS, MUTATION_DISPLACEMENT_RADIUS+1):
+                new_wall = Point(wall.x + i, wall.y + j)
+                if solver._is_tile_in_grid(new_wall) and not solver._is_tile_blocked(new_wall) and new_wall not in occupied_walls:
+                    possible_positions.append(new_wall)
+
+        if possible_positions != []:
+            displaced_wall = random.choice(possible_positions)
+            new_solution.append(displaced_wall)
+
+            occupied_walls.remove(wall)
+            occupied_walls.add(displaced_wall)
+        else:
+            new_solution.append(wall)
+
+    return set(new_solution)
+
+def crossover(solver, *solution):
+    return solution
+
 
 class SimpleSolver(PuzzleSolver):
-    def __init__(self, puzzle, population_size, mutation_rate, individual_mutation_rate, mating_pool_size):
+    def __init__(self, puzzle, population_size, mutation_rate, individual_mutation_rate, mating_pool_size, mutate_func=mutate, fitness_func=fitness, crossover_func=crossover):
         super().__init__(puzzle)
 
         self.generation = 0
@@ -26,6 +85,9 @@ class SimpleSolver(PuzzleSolver):
         self.individual_mutation_rate = individual_mutation_rate
         self.mating_pool_size = mating_pool_size
         self.population = []
+        self.mutate = mutate_func
+        self.fitness = fitness_func
+        self.crossover = crossover_func
 
         self._valid_wall_positions = puzzle.valid_wall_positions()
         self._weights = range(1, population_size + 1)
@@ -68,7 +130,7 @@ class SimpleSolver(PuzzleSolver):
         self.population = []
         for _ in range(self.population_size):
             random_wall_positions = self._random_solution()
-            self.population.append((random_wall_positions, self.fitness(random_wall_positions)) )
+            self.population.append((random_wall_positions, self.fitness(self, random_wall_positions)) )
 
     def _random_solution(self):
         return set(random.sample(self._valid_wall_positions, self.puzzle.num_walls))
@@ -84,74 +146,15 @@ class SimpleSolver(PuzzleSolver):
 
         for sol, fitness in candidates:
             if random.random() < self.mutation_rate:
-                mutated_sol = self.mutate(sol)
+                mutated_sol = self.mutate(self, sol)
                 # print(f"sol: {sol}, mutated_sol: {mutated_sol}")
-                offspring.append((mutated_sol, self.fitness(mutated_sol)))
+                offspring.append((mutated_sol, self.fitness(self, mutated_sol)))
             else:
                 offspring.append((sol, fitness))
 
         self.population = offspring
 
         self.generation += 1
-
-    def fitness(self, solution):
-        # Calculates fitness based on the number of reachable exits and how long they take to get them compared to a default board
-        # If the horse is fully enclosed, adds additional fitness for each tile and item enclosed
-        # defaultEscapes is a tuple list with 		[0] = coordinates       and 	[1] = depth
-
-        fitness = 0
-
-        # run flood fill on the board:
-        flood, stats = self._flood_fill(solution)
-
-        # print("\n".join([" ".join([chr(flood[j][i] + ord("0")) if flood[j][i] != -1 else "X" for j in range(self.puzzle.num_cols)]) for i in range(self.puzzle.num_rows)]))
-
-        # Subtract fitness based on how many escapes possible and how long (compared to default) it takes to get to each
-        for pos, dist in self._default_exits:
-            if flood[pos.x][pos.y] == -1:
-                fitness += 1
-            else:
-                diff = flood[pos.x][pos.y] - dist # compares distance
-                fitness += 1 - (0.5)**(diff)
-                # print(pos, dist, fitness, dist, flood[pos.x][pos.y])
-
-        # for solutions with no escapes, add the number of enclosed tiles to the fitness:
-        if fitness == len(self._default_exits):
-            fitness += stats.tile_count + 3 * stats.cherry_count + 10 * stats.apple_count + 5 * stats.bees_count
-
-        return fitness**FITNESS_EXPONENT
-
-    def mutate(self, solution):
-        # TODO: convert this to ES based mutation with varying displacement radius
-        new_solution = []
-
-        occupied_walls = copy.deepcopy(solution)
-
-        for wall in solution:
-            if random.random() >= self.individual_mutation_rate:
-                new_solution.append(wall)
-                continue
-
-            possible_positions = []
-            for i in range(-MUTATION_DISPLACEMENT_RADIUS, MUTATION_DISPLACEMENT_RADIUS+1):
-                for j in range(-MUTATION_DISPLACEMENT_RADIUS, MUTATION_DISPLACEMENT_RADIUS+1):
-                    new_wall = Point(wall.x + i, wall.y + j)
-                    if self._is_tile_in_grid(new_wall) and not self._is_tile_blocked(new_wall) and new_wall not in occupied_walls:
-                        possible_positions.append(new_wall)
-
-            if possible_positions != []:
-                displaced_wall = random.choice(possible_positions)
-                new_solution.append(displaced_wall)
-
-                occupied_walls.remove(wall)
-                occupied_walls.add(displaced_wall)
-            else:
-                new_solution.append(wall)
-
-        return set(new_solution)
-
-    def crossover(self, *solution):
-        return solution
 
     def pprint_solution(self, solution):
         temp_grid = copy.deepcopy(self.puzzle.grid)
