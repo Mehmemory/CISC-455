@@ -113,6 +113,7 @@ def print_puzzle(walls=placed_walls):
 # =========================== #
 
 # TESTS TO MAKE SURE THIS WORKS
+"""
 print(f"Puzzle size is {PUZZLE_WIDTH} x {PUZZLE_HEIGHT}")
 print(f"Start position is {START_POS}")
 
@@ -131,11 +132,12 @@ print(f"(1, 1) + (1, 3) = {Point(1, 1) + Point(1, 3)}")
 print(f"(1, 1) + (1, 4) = {Point(1, 1).move(1, 4)}")
 print(f"Walls: {list_walls()}")
 print_puzzle()
+"""
 
 
 # ===========================  FITNESS CALCULATION FUNCTIONS =========================== #
 
-FITNESS_EXPONENT = 2	# scales fitness
+FITNESS_EXPONENT = 1	# scales fitness
 
 def on_edge(pos):
 	# returns true if a given pos is on the edge of the puzzle
@@ -192,7 +194,7 @@ def get_fitness(walls, puzzle, defaultEscapes):
 	if fitness == len(defaultEscapes):
 		for y in range(PUZZLE_HEIGHT):
 			for x in range(PUZZLE_WIDTH):	# iterate over each cell
-				if flood[y][x] != 0:		# if that cell is enclosed add fitness
+				if flood[y][x] != -1:		# if that cell is enclosed add fitness
 					fitness+=1
 					# add additional fitness for cherries, apples, bees
 					if combinedPuzzle[y][x] == TileType.CHERRY:
@@ -212,11 +214,59 @@ for y in range(PUZZLE_HEIGHT):
 		if on_edge(Point(x,y)) and defaultFlood[y][x] != -1:
 			defaultExits.append((Point(x,y), defaultFlood[y][x]))
 
+# 1. No walls (baseline)
+def test_fitness():
+	print("\n===== FITNESS FUNCTION TESTS =====\n")
+	no_walls = []
+	f0 = get_fitness(no_walls, copy.deepcopy(PUZZLE), defaultExits)
+	print("Test 1: No walls")
+	print_puzzle(no_walls)
+	print(f"Fitness: {f0}\n")
+
+	# 2. Random walls
+	random_walls = random.sample(valid_walls, MAX_WALLS)
+	f1 = get_fitness(random_walls, copy.deepcopy(PUZZLE), defaultExits)
+	print("Test 2: Random walls")
+	print_puzzle(random_walls)
+	print(f"Fitness: {f1}\n")
+
+	# 3. Try to block the start position (surround it)
+	blocking_walls = []
+	for dx, dy in [(-1,0),(1,0),(0,-1),(0,1)]:
+		p = Point(START_POS.x + dx, START_POS.y + dy)
+		if p in valid_walls:
+			blocking_walls.append(p)
+
+	f2 = get_fitness(blocking_walls, copy.deepcopy(PUZZLE), defaultExits)
+	print("Test 3: Block around start")
+	print_puzzle(blocking_walls)
+	print(f"Fitness: {f2}\n")
+
+	# 4. Manual wall placements
+	blocking_walls = []
+	for x, y in [(1,0),(0,1),(6,0),(7,1),(7,3),(7,4),(6,6),(5,6),(2,6),(1,6),(0,3),(0,4)]:
+		p = Point(x, y)
+		if p in valid_walls:
+			blocking_walls.append(p)
+
+	f2 = get_fitness(blocking_walls, copy.deepcopy(PUZZLE), defaultExits)
+	print("Test 4: Manual wall placements")
+	print_puzzle(blocking_walls)
+	print(f"Fitness: {f2}\n")
+
+	# 5. Repeat same input (consistency check)
+	f_repeat = get_fitness(random_walls, copy.deepcopy(PUZZLE), defaultExits)
+	print("Test 5: Consistency check")
+	print(f"First: {f1}, Second: {f_repeat}")
+	print("Same result?" , f1 == f_repeat)
+
+	print("\n===== END TESTS =====\n")
+test_fitness()
 # ===========================  END OF FITNESS CALCULATION FUNCTIONS =========================== #
 
 POPULATION_SIZE = 100
 MATING_POOL_SIZE = 7	# allow all but the worst of the worst
-MAX_GENERATIONS = 10
+MAX_GENERATIONS = 1
 MUTATION_DISPLACEMENT_RADIUS = 2
 MUTATION_RATE = 0.2 # probablity for an individual wall to change its position
 
@@ -284,8 +334,8 @@ def main():
 		for i in range(len(mating_pool)):
 			solution = mating_pool[i]
 			offspring.append(displace_mutation(solution))
-			print_puzzle(offspring[-1]["walls"])
-			print(f"Fitness: {offspring[-1]["fitness"]}")
+			#print_puzzle(offspring[-1]["walls"])
+			#print(f"Fitness: ", get_fitness(offspring[-1]["walls"], PUZZLE, defaultExits))
 
 
 		population = offspring
@@ -298,7 +348,7 @@ def main():
 	print("===========================")
 	print("Best Solution:")
 	print_puzzle(population[0]["walls"])
-	print(f"Fitness: {population[0]["fitness"]}")
+	print(f"Fitness: {population[0]['fitness']}")
 	print("===========================")
 
 
