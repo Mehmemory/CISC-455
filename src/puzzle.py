@@ -22,13 +22,31 @@ class Puzzle:
 
         self.num_walls = num_walls
 
+    def _grid_from_state_str(self, state_str):
+        if len(state_str) != self.num_cols * self.num_rows:
+            raise Exception("Grid state string does not have the current length.")
+
+        grid = [[None for _ in range(num_rows)] for _ in range(num_cols)]
+        l = 0
+
+        for i in range(num_cols):
+            for j in range(num_rows):
+                grid[i][j] = TileType(state_str[l])
+                l += 1
+
+        return grid
+
+    def _grid_to_state_str(self):
+        state_str = "".join(["".join([self.grid[j][i].value for j in range(self.num_cols)]) for i in range(self.num_rows)])
+        return state_str
+
     @classmethod
     def fromJSON(cls, json_str):
         obj = json.loads(json_str)
 
         num_rows = obj["num_rows"]
         num_cols = obj["num_cols"]
-        grid = obj["grid"]
+        grid = self._grid_from_state_str(obj["grid"])
         num_walls = obj["num_walls"]
 
         return cls(**obj)
@@ -39,7 +57,7 @@ class Puzzle:
             num_cols=self.num_cols,
             num_walls=self.num_walls,
             horse_pos=(self.horse_pos.x, self.horse_pos.y),
-            grid=[v.value for v in row for row in self.grid],
+            grid=self._grid_to_state_str(),
         )
 
         return json.dumps(obj, separators=(",", ":"))
