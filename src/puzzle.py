@@ -1,5 +1,7 @@
-from utils import Point, TileType
+from utils import Point, TileType, _grid_from_state_str, _grid_to_state_str
+
 import json
+import copy
 
 class Puzzle:
     def __init__(self, num_rows, num_cols, grid, num_walls):
@@ -12,8 +14,6 @@ class Puzzle:
 
         for i in range(num_cols):
             for j in range(num_rows):
-                grid[i][j] = TileType(grid[i][j])
-
                 if grid[i][j] == TileType.HORSE:
                     if num_horses != 0:
                         raise Exception("Puzzle cannot have multiple horses.")
@@ -22,42 +22,40 @@ class Puzzle:
 
         self.num_walls = num_walls
 
-    def _grid_from_state_str(self, state_str):
-        if len(state_str) != self.num_cols * self.num_rows:
-            raise Exception("Grid state string does not have the current length.")
-
-        grid = [[None for _ in range(num_rows)] for _ in range(num_cols)]
-        l = 0
-
-        for i in range(num_cols):
-            for j in range(num_rows):
-                grid[i][j] = TileType(state_str[l])
-                l += 1
-
-        return grid
-
-    def _grid_to_state_str(self):
-        state_str = "".join(["".join([self.grid[j][i].value for j in range(self.num_cols)]) for i in range(self.num_rows)])
-        return state_str
-
     @classmethod
-    def fromJSON(cls, json_str):
+    def from_json(cls, json_str):
         obj = json.loads(json_str)
 
         num_rows = obj["num_rows"]
         num_cols = obj["num_cols"]
-        grid = self._grid_from_state_str(obj["grid"])
+        grid = _grid_from_state_str(obj["grid"], num_rows, num_cols)
         num_walls = obj["num_walls"]
 
-        return cls(**obj)
+        return cls(num_rows, num_cols, grid, num_walls)
 
-    def toJSON(self):
+    def to_json(self):
         obj = dict(
             num_rows=self.num_rows,
             num_cols=self.num_cols,
             num_walls=self.num_walls,
             horse_pos=(self.horse_pos.x, self.horse_pos.y),
-            grid=self._grid_to_state_str(),
+            grid=_grid_to_state_str(self.grid, self.num_rows, self.num_cols),
+        )
+
+        return json.dumps(obj, separators=(",", ":"))
+
+    def to_json_with_solution(self, solution):
+        temp_grid = copy.deepcopy(self.grid)
+
+        for wall in solution:
+            temp_grid[wall.x][wall.y] = TileType.WALL
+
+        obj = dict(
+            num_rows=self.num_rows,
+            num_cols=self.num_cols,
+            num_walls=self.num_walls,
+            horse_pos=(self.horse_pos.x, self.horse_pos.y),
+            grid=_grid_to_state_str(temp_grid, self.num_rows, self.num_cols),
         )
 
         return json.dumps(obj, separators=(",", ":"))
