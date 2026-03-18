@@ -3,8 +3,8 @@ from enum import Enum
 # Classes and enums
 class TileType(Enum):
     SPACE = 0
-    WALL = 1
-    WATER = 2
+    WATER = 1
+    WALL = 2
     CHERRY = 3
     APPLE = 4
     BEES = 5
@@ -55,3 +55,21 @@ class Point:
         self.x += x
         self.y += y
         return self
+
+def _grid_to_state_str(grid, num_rows, num_cols):
+    state_str = "".join(["".join([str(grid[j][i].value) for j in range(num_cols)]) for i in range(num_rows)])
+    return state_str
+
+def _grid_from_state_str(state_str, num_rows, num_cols):
+    if len(state_str) != num_cols * num_rows:
+        raise Exception("Grid state string does not have the current length.")
+
+    grid = [[None for _ in range(num_rows)] for _ in range(num_cols)]
+
+    l = 0
+    for j in range(num_rows):
+        for i in range(num_cols):
+            grid[i][j] = TileType(int(state_str[l]))
+            l += 1
+
+    return grid

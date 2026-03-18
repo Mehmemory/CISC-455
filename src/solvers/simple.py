@@ -124,6 +124,7 @@ class SimpleSolver(PuzzleSolver):
         print(f"Mating pool size: {self.mating_pool_size}")
         print("Puzzle:")
         self.puzzle.pprint()
+        print(f"State JSON: {self.puzzle.to_json()}")
         print("=" * 80)
 
     def initialize_population(self):
