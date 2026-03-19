@@ -54,7 +54,7 @@ class Point:
 
 # List of Points representing walls placed by the algorithm, should not exceed MAX_WALLS
 placed_walls = set()		# walls have been placed here
-valid_walls = []		# walls CAN be placed here
+valid_walls = []			# walls CAN be placed here
 
 # Constants and puzzle creation
 PUZZLE = []
@@ -161,7 +161,6 @@ def floodfill(puzzleLayout):
 
 			# if the tile hasn't been checked yet and it's not water...
 			if results[next.y][next.x] == -1 and puzzleLayout[next.y][next.x] != TileType.WATER:
-
 				results[next.y][next.x] = cur[1]+1	# update results
 				if not on_edge(next):	# add to queue if its not on the edge
 					queue.append((next, cur[1]+1))
@@ -175,7 +174,7 @@ def get_fitness(walls, puzzle, defaultEscapes):
 
 	# create a temporary puzzle layout that counts walls as water (since they function the same)
 	fitness = 0
-	combinedPuzzle = puzzle
+	combinedPuzzle = [row[:] for row in puzzle]
 	for w in walls:
 		combinedPuzzle[w.y][w.x] = TileType.WATER
 
@@ -214,7 +213,6 @@ for y in range(PUZZLE_HEIGHT):
 		if on_edge(Point(x,y)) and defaultFlood[y][x] != -1:
 			defaultExits.append((Point(x,y), defaultFlood[y][x]))
 
-# 1. No walls (baseline)
 def test_fitness():
 	print("\n===== FITNESS FUNCTION TESTS =====\n")
 	no_walls = []
@@ -261,10 +259,10 @@ def test_fitness():
 	print("Same result?" , f1 == f_repeat)
 
 	print("\n===== END TESTS =====\n")
-test_fitness()
+#test_fitness()
 # ===========================  END OF FITNESS CALCULATION FUNCTIONS =========================== #
 
-POPULATION_SIZE = 100
+POPULATION_SIZE = 1000
 MATING_POOL_SIZE = 7	# allow all but the worst of the worst
 MAX_GENERATIONS = 1
 MUTATION_DISPLACEMENT_RADIUS = 2
@@ -308,7 +306,7 @@ def displace_mutation(solution):
 		for i in range(-MUTATION_DISPLACEMENT_RADIUS, MUTATION_DISPLACEMENT_RADIUS+1):
 			for j in range(-MUTATION_DISPLACEMENT_RADIUS, MUTATION_DISPLACEMENT_RADIUS+1):
 				new_wall = Point(wall.x + i, wall.y + j)
-				if 0 <= new_wall.x < PUZZLE_WIDTH and 0 <= new_wall.y < PUZZLE_HEIGHT and PUZZLE_DATA[new_wall.y][new_wall.x] == '-' and new_wall not in occupied_walls:
+				if 0 <= new_wall.x < PUZZLE_WIDTH and 0 <= new_wall.y < PUZZLE_HEIGHT and PUZZLE[new_wall.y][new_wall.x] == TileType.SPACE and new_wall not in occupied_walls:
 					possible_positions.append(new_wall)
 
 		displaced_wall = random.choice(possible_positions)
@@ -342,10 +340,13 @@ def main():
 
 		# do crossover, mutation, etc
 
-	population = sorted(population, key = lambda x: x["fitness"])
+	population = sorted(population, key = lambda x: x["fitness"], reverse=True)
 	fitness = list(map(lambda x: x["fitness"], population))
 
 	print("===========================")
+	print("Worst Solution:")
+	print_puzzle(population[-1]["walls"])
+	print(f"Fitness: {population[-1]['fitness']}")
 	print("Best Solution:")
 	print_puzzle(population[0]["walls"])
 	print(f"Fitness: {population[0]['fitness']}")
