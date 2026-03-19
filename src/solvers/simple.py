@@ -1,3 +1,4 @@
+from horse import MAX_WALLS
 from solver import PuzzleSolver
 from utils import Point, TileType
 
@@ -72,7 +73,45 @@ def mutate(solver, solution):
     return set(new_solution)
 
 def crossover(solver, *solution):
-    return solution
+    parent1, parent2 = solution
+    # combine walls from 2 parents
+	# for simplicity of having any crossover function, just take half of the walls from one parent and half from the other, but make sure they are unique and valid placements
+	# will skip if location already in the solution and find a different wall from the other parent to add instead
+    point = random.randint(1, MAX_WALLS//2 - 1)
+    # give it a chance to be more weighted towards lower values.
+    point = random.randint(1, point)
+    point = random.randint(1, point)
+
+    starter = set(parent1["walls"]).intersection(set(parent2["walls"]))
+
+	# since sets are unordered, we will just take the first point walls from parent 1 and the rest from parent 2
+    child_a_walls = set(starter)
+    child_b_walls = set(starter)
+    i = 0
+    while len(child_a_walls) < MAX_WALLS and i < point:
+        if parent1["walls"][i] not in child_a_walls:
+            child_a_walls.add(parent1["walls"][i])
+        i+=1
+    i = 0
+    while len(child_b_walls) < MAX_WALLS and i < point:
+        if parent2["walls"][i] not in child_b_walls:
+            child_b_walls.add(parent2["walls"][i])
+        i+=1
+
+	# that should hopefully mean there are point number of walls from parent 1
+	#fill in the rest with unique placements from the other parent
+    i = 0
+    while len(child_a_walls) < MAX_WALLS:
+        if parent2["walls"][i] not in child_a_walls:
+            child_a_walls.add(parent2["walls"][i])
+        i+=1
+    i=0
+    while len(child_b_walls) < MAX_WALLS:
+        if parent1["walls"][i] not in child_b_walls:
+            child_b_walls.add(parent1["walls"][i])
+        i+=1
+	
+    return child_a_walls, child_b_walls
 
 
 class SimpleSolver(PuzzleSolver):

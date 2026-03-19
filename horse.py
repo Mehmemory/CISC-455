@@ -266,7 +266,7 @@ def test_fitness():
 
 POPULATION_SIZE = 100
 MATING_POOL_SIZE = 7	# allow all but the worst of the worst
-MAX_GENERATIONS = 1
+MAX_GENERATIONS = 3
 MUTATION_DISPLACEMENT_RADIUS = 2
 MUTATION_RATE = 0.2 # probablity for an individual wall to change its position
 
@@ -319,31 +319,49 @@ def displace_mutation(solution):
 	return { "walls": new_walls, "fitness": get_fitness(new_walls, PUZZLE, defaultExits) }
 
 def simple_crossover(parent1, parent2):
-	# combine walls from 2 parents
+    # combine walls from 2 parents
 	# for simplicity of having any crossover function, just take half of the walls from one parent and half from the other, but make sure they are unique and valid placements
 	# will skip if location already in the solution and find a different wall from the other parent to add instead
-	point = 5
-	# since sets are unordered, we will just take the first point walls from parent 1 and the rest from parent 2
-	child_a_walls = set()
-	child_b_walls = set()
-	for i in range(point):
+	point = random.randint(1, MAX_WALLS//2 - 1)
+    # give it a chance to be more weighted towards lower values.
+	point = random.randint(1, point)
+	point = random.randint(1, point)
+	
+	setParent1 = set(parent1["walls"])
+	setParent2 = set(parent2["walls"])
+
+	starter = setParent1.intersection(setParent2)
+
+	# convert back to list to avoid breaking the entire code by chaning the data types
+	child_a_walls = list(starter)
+	child_b_walls = list(starter)
+	#print("starter:")
+	#print_puzzle(child_a_walls)
+	#print("----------------")
+	#print_puzzle(child_b_walls)
+	i = 0
+	while len(child_a_walls) < MAX_WALLS and i < point:
 		if parent1["walls"][i] not in child_a_walls:
-			child_a_walls.add(parent1["walls"][i])
+			child_a_walls.append(parent1["walls"][i])
+		i+=1
+	i = 0
+	while len(child_b_walls) < MAX_WALLS and i < point:
 		if parent2["walls"][i] not in child_b_walls:
-			child_b_walls.add(parent2["walls"][i])
+			child_b_walls.append(parent2["walls"][i])
+		i+=1
+
 	# that should hopefully mean there are point number of walls from parent 1
 	#fill in the rest with unique placements from the other parent
 	i = 0
 	while len(child_a_walls) < MAX_WALLS:
 		if parent2["walls"][i] not in child_a_walls:
-			child_a_walls.add(parent2["walls"][i])
+			child_a_walls.append(parent2["walls"][i])
 		i+=1
 	i=0
-	while len(child_b_walls) < MAX_WALLS:
+	while len(child_b_walls) < MAX_WALLS:	
 		if parent1["walls"][i] not in child_b_walls:
-			child_b_walls.add(parent1["walls"][i])
+			child_b_walls.append(parent1["walls"][i])
 		i+=1
-	
 	return { "walls": child_a_walls, "fitness": get_fitness(child_a_walls, PUZZLE, defaultExits) }, { "walls": child_b_walls, "fitness": get_fitness(child_b_walls, PUZZLE, defaultExits) }
 
 def main():
@@ -369,9 +387,18 @@ def main():
 			if i + 1 < len(mating_pool):
 				parent1 = mating_pool[i]
 				parent2 = mating_pool[i + 1]
+				#print("______________")
+				#print("Parents:")
+				#print_puzzle(parent1["walls"])
+				#print("----------------")
+				#print_puzzle(parent2["walls"])
 				child_a_walls, child_b_walls = simple_crossover(parent1, parent2)
 				offspring.append(child_a_walls)
 				offspring.append(child_b_walls)
+				#print("Children:")
+				#print_puzzle(child_a_walls["walls"])
+				#print("----------------")
+				#print_puzzle(child_b_walls["walls"])
 
 
 
