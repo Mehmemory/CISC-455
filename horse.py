@@ -261,7 +261,7 @@ def test_fitness():
 	print("Same result?" , f1 == f_repeat)
 
 	print("\n===== END TESTS =====\n")
-test_fitness()
+#test_fitness()
 # ===========================  END OF FITNESS CALCULATION FUNCTIONS =========================== #
 
 POPULATION_SIZE = 100
@@ -318,6 +318,33 @@ def displace_mutation(solution):
 
 	return { "walls": new_walls, "fitness": get_fitness(new_walls, PUZZLE, defaultExits) }
 
+def simple_crossover(parent1, parent2):
+	# combine walls from 2 parents
+	# for simplicity of having any crossover function, just take half of the walls from one parent and half from the other, but make sure they are unique and valid placements
+	# will skip if location already in the solution and find a different wall from the other parent to add instead
+	point = 5
+	# since sets are unordered, we will just take the first point walls from parent 1 and the rest from parent 2
+	child_a_walls = set()
+	child_b_walls = set()
+	for i in range(point):
+		if parent1["walls"][i] not in child_a_walls:
+			child_a_walls.add(parent1["walls"][i])
+		if parent2["walls"][i] not in child_b_walls:
+			child_b_walls.add(parent2["walls"][i])
+	# that should hopefully mean there are point number of walls from parent 1
+	#fill in the rest with unique placements from the other parent
+	i = 0
+	while len(child_a_walls) < MAX_WALLS:
+		if parent2["walls"][i] not in child_a_walls:
+			child_a_walls.add(parent2["walls"][i])
+		i+=1
+	i=0
+	while len(child_b_walls) < MAX_WALLS:
+		if parent1["walls"][i] not in child_b_walls:
+			child_b_walls.add(parent1["walls"][i])
+		i+=1
+	
+	return { "walls": child_a_walls, "fitness": get_fitness(child_a_walls, PUZZLE, defaultExits) }, { "walls": child_b_walls, "fitness": get_fitness(child_b_walls, PUZZLE, defaultExits) }
 
 def main():
 	population = [random_solution() for _ in range(POPULATION_SIZE)] 	# dictionary with { "walls": [], and "fitness": n }
@@ -336,6 +363,16 @@ def main():
 			offspring.append(displace_mutation(solution))
 			#print_puzzle(offspring[-1]["walls"])
 			#print(f"Fitness: ", get_fitness(offspring[-1]["walls"], PUZZLE, defaultExits))
+		
+		
+		for i in range(0, len(mating_pool), 2):
+			if i + 1 < len(mating_pool):
+				parent1 = mating_pool[i]
+				parent2 = mating_pool[i + 1]
+				child_a_walls, child_b_walls = simple_crossover(parent1, parent2)
+				offspring.append(child_a_walls)
+				offspring.append(child_b_walls)
+
 
 
 		population = offspring
@@ -351,6 +388,6 @@ def main():
 	print(f"Fitness: {population[0]['fitness']}")
 	print("===========================")
 
-
+main()
 if __name__ == '__main__':
     main()
