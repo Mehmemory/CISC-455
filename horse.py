@@ -309,10 +309,13 @@ def displace_mutation(solution):
 				if 0 <= new_wall.x < PUZZLE_WIDTH and 0 <= new_wall.y < PUZZLE_HEIGHT and PUZZLE[new_wall.y][new_wall.x] == TileType.SPACE and new_wall not in occupied_walls:
 					possible_positions.append(new_wall)
 
-		displaced_wall = random.choice(possible_positions)
-		new_walls.append(displaced_wall)
-		occupied_walls.remove(wall)
-		occupied_walls.add(displaced_wall)
+		if len(possible_positions) > 0:
+			displaced_wall = random.choice(possible_positions)
+			new_walls.append(displaced_wall)
+			occupied_walls.remove(wall)
+			occupied_walls.add(displaced_wall)
+		else:
+			new_wall.append(wall)
 
 	return { "walls": new_walls, "fitness": get_fitness(new_walls, PUZZLE, defaultExits) }
 
