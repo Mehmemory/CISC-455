@@ -336,16 +336,16 @@ def mutate(parent, lr, sigma_bounds):
 		num_attempts = 0
 
 		while not found_valid_pos and num_attempts < DISPLACEMENT_MAX_ATTEMPTS:
-			new_wall = Point(round(wall.x + random.gauss(0, child_sigma)), round(wall.y + random.gauss(0, child_sigma)))
+			new_wall = Point(round(wall.x + child_sigma * random.gauss(0, 1)), round(wall.y + child_sigma * random.gauss(0, 1)))
 
 			# Clamp perturbed wall position to be within the grid
 			if new_wall.x < 0:
 				new_wall.x = 0
-			elif new_wall.x  >= PUZZLE_WIDTH:
+			elif new_wall.x >= PUZZLE_WIDTH:
 				new_wall.x = PUZZLE_WIDTH - 1
 			if new_wall.y < 0:
 				new_wall.y = 0
-			elif new_wall.y  >= PUZZLE_HEIGHT:
+			elif new_wall.y >= PUZZLE_HEIGHT:
 				new_wall.y = PUZZLE_HEIGHT - 1
 
 			num_attempts += 1
@@ -425,7 +425,7 @@ def main():
 		for i in range(len(mating_pool)):
 			solution = mating_pool[i]
 			offspring.append(mutate(solution, lr, sigma_bounds))
-			# print_puzzle(offspring[-1]["walls"])
+			print_puzzle(offspring[-1]["walls"])
 			#print(f"Fitness: ", get_fitness(offspring[-1]["walls"], PUZZLE, defaultExits))
 
 
