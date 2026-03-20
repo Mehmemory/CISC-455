@@ -2,6 +2,7 @@ from enum import Enum
 from collections import deque
 import random
 import copy
+import math
 
 # Define the puzzle here
 # Wall is #, Space is -, Start pos is O
@@ -265,14 +266,17 @@ def test_fitness():
 POPULATION_SIZE = 1000
 MATING_POOL_SIZE = 7	# allow all but the worst of the worst
 MAX_GENERATIONS = 1
-MUTATION_DISPLACEMENT_RADIUS = 2
-MUTATION_RATE = 0.2 # probablity for an individual wall to change its position
+DISPLACEMENT_MAX_ATTEMPTS = 10 # maximum number of attempts to before giving up moving a wall in mutation
+SOLUTION_MUTATION_RATE = 0.2 # probablity for a solution to undergo mutation
+INDIVIDUAL_WALL_MUTATION_RATE = 0.2 # probablity for an individual wall to change its position
 
+DIRS = [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)]
 
 #  Create a random solution that just picks from random available wall positions
-def random_solution():
+def random_solution(sigma_init=3.0):
 	random_wall_positions = random.sample(valid_walls, MAX_WALLS)
-	return { "walls": random_wall_positions, "fitness": get_fitness(random_wall_positions, PUZZLE, defaultExits) }
+	default_sigmas = [sigma_init for _ in range(MAX_WALLS)]
+	return { "walls": random_wall_positions, "sigmas": default_sigmas, "fitness": get_fitness(random_wall_positions, PUZZLE, defaultExits) }
 
 
 #	Selection via linear ranking
@@ -288,41 +292,127 @@ def tournament(population):
 	return random.choices(candidates, weights=weights, k=MATING_POOL_SIZE)
 
 
-def displace_mutation(solution):
-	# TODO: convert this to ES based mutation with varying displacement radius
+def mutate(parent, lr, sigma_bounds):
+	"""
+    Generate a mutated solution using a Gaussian mutation step size and self-adaptation.
 
-	new_walls = []
+    Parameters:
+        parent       : (dict) A single solution.
+        lr           : (float) learning rate.
+        sigma_bounds : (float) Lower and upper boundary for sigma.
 
-	occupied_walls = set(solution["walls"])
+    Returns:
+        child        : (dict) A new mutated solution.
+    """
+	sigma_lb, sigma_ub = sigma_bounds
 
-	for wall in solution["walls"]:
+	parent_sigmas = parent["sigmas"] # Sigma corresponding to the parent
+	parent_walls = parent["walls"] # Walls from the parent solution
+
+	child_sigmas = []
+
+	for sigma in parent_sigmas:
+		child_sigma = sigma * math.exp(lr * random.gauss(0, 1))
+		# Enforce upper and lower bound for child sigma
+		if sigma_lb > child_sigma:
+			child_sigma = sigma_lb
+		if sigma_ub < child_sigma:
+			child_sigma = sigma_ub
+		child_sigmas.append(child_sigma)
+
+	# occupied_walls = set(parent["walls"])
+
+	child_walls = []
+
+	for wall, child_sigma in zip(parent_walls, child_sigmas):
 		mutate_prob = random.random()
 
-		if mutate_prob >= MUTATION_RATE:
-			new_walls.append(wall)
+		if mutate_prob >= INDIVIDUAL_WALL_MUTATION_RATE:
+			child_walls.append(wall)
 			continue
 
-		possible_positions = []
-		for i in range(-MUTATION_DISPLACEMENT_RADIUS, MUTATION_DISPLACEMENT_RADIUS+1):
-			for j in range(-MUTATION_DISPLACEMENT_RADIUS, MUTATION_DISPLACEMENT_RADIUS+1):
-				new_wall = Point(wall.x + i, wall.y + j)
-				if 0 <= new_wall.x < PUZZLE_WIDTH and 0 <= new_wall.y < PUZZLE_HEIGHT and PUZZLE[new_wall.y][new_wall.x] == TileType.SPACE and new_wall not in occupied_walls:
-					possible_positions.append(new_wall)
+		found_valid_pos = False
+		new_wall = None
+		num_attempts = 0
 
-		if len(possible_positions) > 0:
-			displaced_wall = random.choice(possible_positions)
-			new_walls.append(displaced_wall)
-			occupied_walls.remove(wall)
-			occupied_walls.add(displaced_wall)
+		while not found_valid_pos and num_attempts < DISPLACEMENT_MAX_ATTEMPTS:
+			new_wall = Point(round(wall.x + random.gauss(0, child_sigma)), round(wall.y + random.gauss(0, child_sigma)))
+
+			# Clamp perturbed wall position to be within the grid
+			if new_wall.x < 0:
+				new_wall.x = 0
+			elif new_wall.x  >= PUZZLE_WIDTH:
+				new_wall.x = PUZZLE_WIDTH - 1
+			if new_wall.y < 0:
+				new_wall.y = 0
+			elif new_wall.y  >= PUZZLE_HEIGHT:
+				new_wall.y = PUZZLE_HEIGHT - 1
+
+			num_attempts += 1
+
+			if PUZZLE[new_wall.y][new_wall.x] == TileType.SPACE:
+				found_valid_pos = True
+
+		# If no valid position has been found after generating perturbed wall
+		# positions DISPLACEMENT_MAX_ATTEMPTS number of times, then give up and
+		# keep the current wall position. Otherwise, add the new wall position to
+		# child's walls.
+		if not found_valid_pos:
+			child_walls.append(wall)
 		else:
-			new_wall.append(wall)
+			child_walls.append(new_wall)
 
-	return { "walls": new_walls, "fitness": get_fitness(new_walls, PUZZLE, defaultExits) }
+		# # Get possible positions for the wall to be moved to
+		# possible_positions = []
+
+		# queue = deque()
+
+		# for dir in DIRS:
+		# 	new_pos = wall + dir
+		# 	if (0 <= new_pos.x < PUZZLE_WIDTH and 0 <= new_pos.y < PUZZLE_HEIGHT):
+		# 		queue.append((new_pos, 1))
+
+		# # Perform BFS to discover all admissible wall positions within a circle around the
+		# # current wall position with radius == displacement_radius
+		# while len(queue) > 0:
+		# 	curr_pos, curr_dist = queue.popleft()
+
+		# 	if PUZZLE[curr_pos.y][curr_pos.x] == TileType.SPACE:
+		# 		possible_positions.append(curr_pos)
+
+		# 	# If the current dist is equal or greater than the displacement radius, stop further
+		# 	# searches
+		# 	if curr_dist >= displacement_radius:
+		# 		continue
+
+		# 	for dir in DIRS:
+		# 		new_pos = curr_pos + dir
+
+		# 		if (0 <= new_pos.x < PUZZLE_WIDTH and 0 <= new_pos.y < PUZZLE_HEIGHT):
+		# 			queue.append((new_pos, curr_dist + 1))
+
+		# # If there are no positions the wall can be moved to, keep it where it is
+		# if len(possible_positions) == 0:
+		# 	new_walls.append(wall)
+		# else:
+		# 	new_wall = random.choice(possible_positions)
+		# 	new_walls.append(new_wall)
+		# 	# Remove the old wall's position and add the new wall's position to
+		# 	# the occupied walls set so subsequently displaced walls can not
+		# 	# choose the same position
+		# 	occupied_walls.remove(wall)
+		# 	occupied_walls.add(new_wall)
+
+	child = dict(sigmas=child_sigmas, walls=child_walls, fitness=get_fitness(child_walls, PUZZLE, defaultExits))
+
+	return child
 
 
 def main():
 	population = [random_solution() for _ in range(POPULATION_SIZE)] 	# dictionary with { "walls": [], and "fitness": n }
 	generation = 0
+	sigma_bounds = (1, max(PUZZLE_WIDTH, PUZZLE_HEIGHT) // 2)
+	lr = 1 / math.sqrt(MAX_WALLS)
 
 	# 	Evolve!
 	while generation < MAX_GENERATIONS:
@@ -334,8 +424,8 @@ def main():
 
 		for i in range(len(mating_pool)):
 			solution = mating_pool[i]
-			offspring.append(displace_mutation(solution))
-			#print_puzzle(offspring[-1]["walls"])
+			offspring.append(mutate(solution, lr, sigma_bounds))
+			# print_puzzle(offspring[-1]["walls"])
 			#print(f"Fitness: ", get_fitness(offspring[-1]["walls"], PUZZLE, defaultExits))
 
 
