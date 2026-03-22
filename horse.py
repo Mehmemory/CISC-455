@@ -416,6 +416,9 @@ def crossover(parent1, parent2):
 	# since sets are unordered, we will just take the first point walls from parent 1 and the rest from parent 2
 	child_a_walls = set(starter)
 	child_b_walls = set(starter)
+
+	# cross walls
+	#cross point number of walls from one parent into another
 	i = 0
 	added = 0
 	while len(child_a_walls) < MAX_WALLS and added < point:
@@ -444,12 +447,36 @@ def crossover(parent1, parent2):
 			child_b_walls.add(parent1["walls"][i])
 		i+=1
 	
-	# todo: cross these over properly
-	sigma_a = parent1["sigmas"]
-	sigma_b = parent2["sigmas"]
-	
-	return { "walls": child_a_walls, "sigmas": sigma_a }, { "walls": child_b_walls, "sigmas": sigma_b }
+	# cross sigmas 
+	# maps wall to corrisponding sigma, so can find the sigma using the wall (so we only have to look at the walls to detemrine sigma)
+	parent1_map = {w: s for w, s in zip(parent1["walls"], parent1["sigmas"])}
+	parent2_map = {w: s for w, s in zip(parent2["walls"], parent2["sigmas"])}
 
+	sigma_a = []
+	for w in child_a_walls:
+		if w in parent1_map and w in parent2_map:
+		# combine sigmas of walls in both parents
+			sigma_a.append((parent1_map[w] + parent2_map[w]) / 2)
+		elif w in parent1_map:
+			# if it was from parent 1 only, take that sigma
+			sigma_a.append(parent1_map[w])
+		else:
+			# if it was from parent 2 only, take that sigma
+			sigma_a.append(parent2_map[w])
+
+	# same thing but for child b
+	sigma_b = []
+	for w in child_b_walls:
+		if w in parent1_map and w in parent2_map:
+			sigma_b.append((parent1_map[w] + parent2_map[w]) / 2)
+		elif w in parent2_map:
+			sigma_b.append(parent2_map[w])
+		else:
+			sigma_b.append(parent1_map[w])
+	
+	# return walls and sigmas
+	return { "walls": child_a_walls, "sigmas": sigma_a }, { "walls": child_b_walls, "sigmas": sigma_b }
+	
 
 
 POPULATION_SIZE = 100
