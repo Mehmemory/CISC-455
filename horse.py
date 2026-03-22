@@ -400,8 +400,8 @@ def crossover(parent1, parent2):
 		if parent1["walls"][i] not in child_b_walls:
 			child_b_walls.add(parent1["walls"][i])
 		i+=1
-	
-	# cross sigmas 
+
+	# cross sigmas
 	# maps wall to corrisponding sigma, so can find the sigma using the wall (so we only have to look at the walls to detemrine sigma)
 	parent1_map = {w: s for w, s in zip(parent1["walls"], parent1["sigmas"])}
 	parent2_map = {w: s for w, s in zip(parent2["walls"], parent2["sigmas"])}
@@ -427,25 +427,25 @@ def crossover(parent1, parent2):
 			sigma_b.append(parent2_map[w])
 		else:
 			sigma_b.append(parent1_map[w])
-	
+
 	# return walls and sigmas
 	return { "walls": child_a_walls, "sigmas": sigma_a }, { "walls": child_b_walls, "sigmas": sigma_b }
-	
+
 
 
 POPULATION_SIZE = 200
 MATING_POOL_SIZE = 200
 MAX_GENERATIONS = 100
 DISPLACEMENT_MAX_ATTEMPTS = 5 # maximum number of attempts to before giving up moving a wall in mutation
-SOLUTION_MUTATION_RATE = 0.2 # probablity for a solution to undergo mutation
-INDIVIDUAL_WALL_MUTATION_RATE = 0.2 # probablity for an individual wall to change its position
+SOLUTION_MUTATION_RATE = 0.4 # probablity for a solution to undergo mutation
+INDIVIDUAL_WALL_MUTATION_RATE = 0.3 # probablity for an individual wall to change its position
 
 DIRS = [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)]
 
 
 
 def main():
-	
+
 	population = [random_solution() for _ in range(POPULATION_SIZE)] 	# dictionary with { "walls": [], and "fitness": n }
 	generation = 0
 	sigma_bounds = (1, max(PUZZLE_WIDTH, PUZZLE_HEIGHT) // 2)
@@ -458,7 +458,7 @@ def main():
 		generation += 1
 
 		offspring = []
-		
+
 		# check for best solution so far
 		for p in population:
 			if best_solution is None or p["fitness"] > best_solution["fitness"]:
@@ -475,11 +475,17 @@ def main():
 			p2 = mating_pool.pop(random.randint(0, len(mating_pool) - 1))
 
 			# run crossover on them
-			cross = crossover(p1, p2)
-			
+			offspring1, offspring2 = crossover(p1, p2)
+
 			# mutate and add to offspring list
-			offspring.append(mutate(cross[0], learning_rate, sigma_bounds))
-			offspring.append(mutate(cross[1], learning_rate, sigma_bounds))
+			if random.random() < SOLUTION_MUTATION_RATE:
+				offspring1 = mutate(offspring1, learning_rate, sigma_bounds)
+
+			if random.random() < SOLUTION_MUTATION_RATE:
+				offspring2 = mutate(offspring2, learning_rate, sigma_bounds)
+
+			offspring.append(offspring1)
+			offspring.append(offspring2)
 			total_fitness_calculations += 2
 
 		population = offspring
