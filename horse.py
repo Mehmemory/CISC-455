@@ -263,15 +263,6 @@ def test_fitness():
 #test_fitness()
 # ===========================  END OF FITNESS CALCULATION FUNCTIONS =========================== #
 
-POPULATION_SIZE = 1000
-MATING_POOL_SIZE = 7	# allow all but the worst of the worst
-MAX_GENERATIONS = 1
-DISPLACEMENT_MAX_ATTEMPTS = 10 # maximum number of attempts to before giving up moving a wall in mutation
-SOLUTION_MUTATION_RATE = 0.2 # probablity for a solution to undergo mutation
-INDIVIDUAL_WALL_MUTATION_RATE = 0.2 # probablity for an individual wall to change its position
-
-DIRS = [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)]
-
 #  Create a random solution that just picks from random available wall positions
 def random_solution(sigma_init=3.0):
 	random_wall_positions = random.sample(valid_walls, MAX_WALLS)
@@ -294,16 +285,16 @@ def tournament(population):
 
 def mutate(parent, lr, sigma_bounds):
 	"""
-    Generate a mutated solution using a Gaussian mutation step size and self-adaptation.
+	Generate a mutated solution using a Gaussian mutation step size and self-adaptation.
 
-    Parameters:
-        parent       : (dict) A single solution.
-        lr           : (float) learning rate.
-        sigma_bounds : (float) Lower and upper boundary for sigma.
+	Parameters:
+		parent       : (dict) A single solution.
+		lr           : (float) learning rate.
+		sigma_bounds : (float) Lower and upper boundary for sigma.
 
-    Returns:
-        child        : (dict) A new mutated solution.
-    """
+	Returns:
+		child        : (dict) A new mutated solution.
+	"""
 	sigma_lb, sigma_ub = sigma_bounds
 
 	parent_sigmas = parent["sigmas"] # Sigma corresponding to the parent
@@ -408,43 +399,117 @@ def mutate(parent, lr, sigma_bounds):
 	return child
 
 
+def crossover(parent1, parent2):
+	# combine walls from 2 parents
+	# for simplicity of having any crossover function, just take half of the walls from one parent and half from the other, but make sure they are unique and valid placements
+	# will skip if location already in the solution and find a different wall from the other parent to add instead
+	point = random.randint(1, MAX_WALLS//2 - 1)
+	# give it a chance to be more weighted towards lower values.
+	point = random.randint(1, point)
+	point = random.randint(1, point)
+
+	starter = set(parent1["walls"]).intersection(set(parent2["walls"]))
+
+	# since sets are unordered, we will just take the first point walls from parent 1 and the rest from parent 2
+	child_a_walls = set(starter)
+	child_b_walls = set(starter)
+	i = 0
+	while len(child_a_walls) < MAX_WALLS and i < point:
+		if parent1["walls"][i] not in child_a_walls:
+			child_a_walls.add(parent1["walls"][i])
+		i+=1
+	i = 0
+	while len(child_b_walls) < MAX_WALLS and i < point:
+		if parent2["walls"][i] not in child_b_walls:
+			child_b_walls.add(parent2["walls"][i])
+		i+=1
+
+	# that should hopefully mean there are point number of walls from parent 1
+	#fill in the rest with unique placements from the other parent
+	i = 0
+	while len(child_a_walls) < MAX_WALLS:
+		if parent2["walls"][i] not in child_a_walls:
+			child_a_walls.add(parent2["walls"][i])
+		i+=1
+	i=0
+	while len(child_b_walls) < MAX_WALLS:
+		if parent1["walls"][i] not in child_b_walls:
+			child_b_walls.add(parent1["walls"][i])
+		i+=1
+
+	# todo: cross these over properly
+	sigma_a = parent1["sigmas"]
+	sigma_b = parent2["sigmas"]
+	
+	return { "walls": child_a_walls, "sigmas": sigma_a }, { "walls": child_b_walls, "sigmas": sigma_b }
+
+
+
+POPULATION_SIZE = 100
+MATING_POOL_SIZE = 20
+MAX_GENERATIONS = 5
+DISPLACEMENT_MAX_ATTEMPTS = 10 # maximum number of attempts to before giving up moving a wall in mutation
+SOLUTION_MUTATION_RATE = 0.2 # probablity for a solution to undergo mutation
+INDIVIDUAL_WALL_MUTATION_RATE = 0.2 # probablity for an individual wall to change its position
+
+DIRS = [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)]
+
+
+
 def main():
+	
 	population = [random_solution() for _ in range(POPULATION_SIZE)] 	# dictionary with { "walls": [], and "fitness": n }
 	generation = 0
 	sigma_bounds = (1, max(PUZZLE_WIDTH, PUZZLE_HEIGHT) // 2)
-	lr = 1 / math.sqrt(MAX_WALLS)
+	learning_rate = 1 / math.sqrt(MAX_WALLS)
+	total_fitness_calculations = POPULATION_SIZE
+	best_solution = None   # highest fitness so far
 
 	# 	Evolve!
 	while generation < MAX_GENERATIONS:
 		generation += 1
 
 		offspring = []
+		
+		# check for best solution so far
+		for p in population:
+			if best_solution is None or p["fitness"] > best_solution["fitness"]:
+				best_solution = copy.deepcopy(p)
+
+		print("-> Starting generation", generation, "\n-> Best fitness so far is", best_solution["fitness"], "\n-> Fitness calculations: ", total_fitness_calculations)
 
 		mating_pool = tournament(population)
 
-		for i in range(len(mating_pool)):
-			solution = mating_pool[i]
-			offspring.append(mutate(solution, lr, sigma_bounds))
-			print_puzzle(offspring[-1]["walls"])
-			#print(f"Fitness: ", get_fitness(offspring[-1]["walls"], PUZZLE, defaultExits))
+		# run crossover until mating pool is empty
+		while len(mating_pool) > 0:
+			# pop two random values from the mating pool
+			p1 = mating_pool.pop(random.randint(0, len(mating_pool) - 1))
+			p2 = mating_pool.pop(random.randint(0, len(mating_pool) - 1))
 
+			# run crossover on them
+			cross = crossover(p1, p2)
+			
+			# mutate and add to offspring list
+			offspring.append(mutate(cross[0], learning_rate, sigma_bounds))
+			offspring.append(mutate(cross[1], learning_rate, sigma_bounds))
+			total_fitness_calculations += 2
 
 		population = offspring
 
-		# do crossover, mutation, etc
 
 	population = sorted(population, key = lambda x: x["fitness"], reverse=True)
-	fitness = list(map(lambda x: x["fitness"], population))
+	fitnesses = list(map(lambda x: x["fitness"], population))
 
 	print("===========================")
-	print("Worst Solution:")
+	print("Total fitness calculations:", total_fitness_calculations)
+	print("\nWorst Solution:")
 	print_puzzle(population[-1]["walls"])
 	print(f"Fitness: {population[-1]['fitness']}")
-	print("Best Solution:")
+	print("\nBest Solution:")
 	print_puzzle(population[0]["walls"])
 	print(f"Fitness: {population[0]['fitness']}")
 	print("===========================")
 
 
 if __name__ == '__main__':
-    main()
+	main()
