@@ -299,6 +299,7 @@ def mutate(parent, lr, sigma_bounds):
 
 	parent_sigmas = parent["sigmas"] # Sigma corresponding to the parent
 	parent_walls = parent["walls"] # Walls from the parent solution
+	filledspaces = set(parent_walls) # set of unique walls to check for duplicates
 
 	child_sigmas = []
 
@@ -342,7 +343,8 @@ def mutate(parent, lr, sigma_bounds):
 			num_attempts += 1
 
 			if PUZZLE[new_wall.y][new_wall.x] == TileType.SPACE:
-				found_valid_pos = True
+				if new_wall not in filledspaces: # make sure new wall position is not occupied
+					found_valid_pos = True
 
 		# If no valid position has been found after generating perturbed wall
 		# positions DISPLACEMENT_MAX_ATTEMPTS number of times, then give up and
@@ -352,6 +354,7 @@ def mutate(parent, lr, sigma_bounds):
 			child_walls.append(wall)
 		else:
 			child_walls.append(new_wall)
+			filledspaces.add(new_wall) #add new wall to set so that it is not chosen again for subsequent walls in this mutation
 
 		# # Get possible positions for the wall to be moved to
 		# possible_positions = []
@@ -414,14 +417,18 @@ def crossover(parent1, parent2):
 	child_a_walls = set(starter)
 	child_b_walls = set(starter)
 	i = 0
-	while len(child_a_walls) < MAX_WALLS and i < point:
+	added = 0
+	while len(child_a_walls) < MAX_WALLS and added < point:
 		if parent1["walls"][i] not in child_a_walls:
 			child_a_walls.add(parent1["walls"][i])
+			added += 1
 		i+=1
 	i = 0
-	while len(child_b_walls) < MAX_WALLS and i < point:
+	added = 0
+	while len(child_b_walls) < MAX_WALLS and added < point:
 		if parent2["walls"][i] not in child_b_walls:
 			child_b_walls.add(parent2["walls"][i])
+			added += 1
 		i+=1
 
 	# that should hopefully mean there are point number of walls from parent 1
@@ -436,7 +443,7 @@ def crossover(parent1, parent2):
 		if parent1["walls"][i] not in child_b_walls:
 			child_b_walls.add(parent1["walls"][i])
 		i+=1
-
+	
 	# todo: cross these over properly
 	sigma_a = parent1["sigmas"]
 	sigma_b = parent2["sigmas"]
@@ -447,7 +454,7 @@ def crossover(parent1, parent2):
 
 POPULATION_SIZE = 100
 MATING_POOL_SIZE = 20
-MAX_GENERATIONS = 5
+MAX_GENERATIONS = 100
 DISPLACEMENT_MAX_ATTEMPTS = 10 # maximum number of attempts to before giving up moving a wall in mutation
 SOLUTION_MUTATION_RATE = 0.2 # probablity for a solution to undergo mutation
 INDIVIDUAL_WALL_MUTATION_RATE = 0.2 # probablity for an individual wall to change its position
