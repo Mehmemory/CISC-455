@@ -351,7 +351,10 @@ def mutate(parent, lr, sigma_bounds):
 		# 	occupied_walls.remove(wall)
 		# 	occupied_walls.add(new_wall)
 
-	child = dict(sigmas=child_sigmas, walls=child_walls, fitness=get_fitness(child_walls, PUZZLE, defaultExits))
+	child = dict(
+		sigmas=child_sigmas,
+		walls=child_walls,
+	)
 
 	return child
 
@@ -429,7 +432,7 @@ def crossover(parent1, parent2):
 			sigma_b.append(parent1_map[w])
 
 	# return walls and sigmas
-	return { "walls": child_a_walls, "sigmas": sigma_a }, { "walls": child_b_walls, "sigmas": sigma_b }
+	return { "walls": list(child_a_walls), "sigmas": sigma_a }, { "walls": list(child_b_walls), "sigmas": sigma_b }
 
 
 
@@ -445,7 +448,6 @@ DIRS = [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)]
 
 
 def main():
-
 	population = [random_solution() for _ in range(POPULATION_SIZE)] 	# dictionary with { "walls": [], and "fitness": n }
 	generation = 0
 	sigma_bounds = (1, max(PUZZLE_WIDTH, PUZZLE_HEIGHT) // 2)
@@ -484,8 +486,13 @@ def main():
 			if random.random() < SOLUTION_MUTATION_RATE:
 				offspring2 = mutate(offspring2, learning_rate, sigma_bounds)
 
+			# calculate fitness of offsprings
+			offspring1["fitness"] = get_fitness(offspring1["walls"], PUZZLE, defaultExits)
+			offspring2["fitness"] = get_fitness(offspring2["walls"], PUZZLE, defaultExits)
+
 			offspring.append(offspring1)
 			offspring.append(offspring2)
+
 			total_fitness_calculations += 2
 
 		population = offspring
