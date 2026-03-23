@@ -283,6 +283,8 @@ def tournament_roulette(population, count):
 
 		mating_pool.append(candidates[i])
 
+	random.shuffle(mating_pool)
+
 	return mating_pool
 
 # Multi-pointer selection with linear ranking
@@ -320,6 +322,8 @@ def tournament_mps(population, count):
 			roulette_value -= count
 
 		i -= 1
+
+	random.shuffle(mating_pool)
 
 	return mating_pool
 
