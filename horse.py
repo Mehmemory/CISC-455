@@ -367,6 +367,7 @@ def crossover(parent1, parent2):
 	# give it a chance to be more weighted towards lower values.
 	point = random.randint(1, point)
 	point = random.randint(1, point)
+	start = random.randint(0, MAX_WALLS-1)
 
 	starter = set(parent1["walls"]).intersection(set(parent2["walls"]))
 
@@ -376,32 +377,32 @@ def crossover(parent1, parent2):
 
 	# cross walls
 	#cross point number of walls from one parent into another
-	i = 0
+	i = start
 	added = 0
 	while len(child_a_walls) < MAX_WALLS and added < point:
-		if parent1["walls"][i] not in child_a_walls:
-			child_a_walls.add(parent1["walls"][i])
+		if parent1["walls"][i % MAX_WALLS] not in child_a_walls:
+			child_a_walls.add(parent1["walls"][i % MAX_WALLS])
 			added += 1
 		i+=1
-	i = 0
+	i = start
 	added = 0
 	while len(child_b_walls) < MAX_WALLS and added < point:
-		if parent2["walls"][i] not in child_b_walls:
-			child_b_walls.add(parent2["walls"][i])
+		if parent2["walls"][i % MAX_WALLS] not in child_b_walls:
+			child_b_walls.add(parent2["walls"][i % MAX_WALLS])
 			added += 1
 		i+=1
 
 	# that should hopefully mean there are point number of walls from parent 1
 	#fill in the rest with unique placements from the other parent
-	i = 0
+	i = start
 	while len(child_a_walls) < MAX_WALLS:
-		if parent2["walls"][i] not in child_a_walls:
-			child_a_walls.add(parent2["walls"][i])
+		if parent2["walls"][i % MAX_WALLS] not in child_a_walls:
+			child_a_walls.add(parent2["walls"][i % MAX_WALLS])
 		i+=1
-	i=0
+	i=start
 	while len(child_b_walls) < MAX_WALLS:
-		if parent1["walls"][i] not in child_b_walls:
-			child_b_walls.add(parent1["walls"][i])
+		if parent1["walls"][i % MAX_WALLS] not in child_b_walls:
+			child_b_walls.add(parent1["walls"][i % MAX_WALLS])
 		i+=1
 
 	# cross sigmas
@@ -436,9 +437,9 @@ def crossover(parent1, parent2):
 
 
 
-POPULATION_SIZE = 200
-MATING_POOL_SIZE = 200
-MAX_GENERATIONS = 100
+POPULATION_SIZE = 500
+MATING_POOL_SIZE = 500
+MAX_GENERATIONS = 1000
 DISPLACEMENT_MAX_ATTEMPTS = 5 # maximum number of attempts to before giving up moving a wall in mutation
 SOLUTION_MUTATION_RATE = 0.4 # probablity for a solution to undergo mutation
 INDIVIDUAL_WALL_MUTATION_RATE = 0.3 # probablity for an individual wall to change its position
