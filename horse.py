@@ -236,7 +236,7 @@ for y in range(PUZZLE_HEIGHT):
 # ===========================  END OF FITNESS CALCULATION FUNCTIONS =========================== #
 
 #  Create a random solution that just picks from random available wall positions
-def random_solution(sigma_init=3.0):
+def random_solution(sigma_init=4.0):
 	random_wall_positions = random.sample(valid_walls, MAX_WALLS)
 	default_sigmas = [sigma_init for _ in range(MAX_WALLS)]
 	return { "walls": random_wall_positions, "sigmas": default_sigmas, "fitness": get_fitness(random_wall_positions, PUZZLE, defaultExits) }
@@ -507,12 +507,14 @@ def main():
 		offspring = []
 
 		# check for best solution so far + stats from previous generation
-		old_best = best_solution["fitness"] 
+		old_best = best_solution["fitness"]
 		avg_fitness = 0
+		avg_strategy = [0 for i in range(MAX_WALLS)]
 
 		for p in population:
-
 			avg_fitness += p["fitness"]
+			for i, v in enumerate(p["sigmas"]):
+				avg_strategy[i] += v
 
 			if best_solution["generation"] == -1 or p["fitness"] > old_best:
 				best_solution = copy.deepcopy(p)
@@ -523,11 +525,16 @@ def main():
 
 		if new_best >= math.inf:
 			print(f"-> !!! FOUND OPTIMAL SOLUTION !!!")
-			break		
+			break
+
+		for i in range(MAX_WALLS):
+			avg_strategy[i] = avg_strategy[i] / len(population)
 
 		print("-> Average fitness was ", avg_fitness / len(population))
+		print("-> Average strategy parameter: ", avg_strategy)
 
 		print("\n-> Starting generation", generation)
+		print("-> Population size: ", len(population))
 		print(f"-> Best fitness so far is {best_solution['fitness']} (from gen {best_solution['generation']})")
 		print("-> Fitness calculations: ", total_fitness_calculations)
 
