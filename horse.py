@@ -236,7 +236,7 @@ for y in range(PUZZLE_HEIGHT):
 # ===========================  END OF FITNESS CALCULATION FUNCTIONS =========================== #
 
 #  Create a random solution that just picks from random available wall positions
-def random_solution(sigma_init=4.0):
+def random_solution(sigma_init=3.0):
 	random_wall_positions = random.sample(valid_walls, MAX_WALLS)
 	default_sigmas = [sigma_init for _ in range(MAX_WALLS)]
 	return { "walls": random_wall_positions, "sigmas": default_sigmas, "fitness": get_fitness(random_wall_positions, PUZZLE, defaultExits) }
@@ -253,6 +253,75 @@ def tournament(population, _):
 
 	# Choose a bunch of candidates based on their weight of being picked
 	return random.choices(candidates, weights=weights, k=MATING_POOL_SIZE)
+
+# Roulette selection with linear ranking
+def tournament_roulette(population, count):
+	mating_pool = []
+
+	candidates = sorted(population, key=lambda x: x["fitness"])
+
+	# We need a lot of offspring for evolution strategy, so instead of working with
+	# floating point value, we transform the "roulette markers" to be integers by
+	# picking the roulette values in the range [0, rank_sum] where the markers are now
+	# just the rank themselves instead of the probability.
+
+	mu = len(population)
+	rank_sum = (mu * (mu - 1))/2
+
+	cdf = [0 for i in range(mu)]
+
+	# Compute prefix sum
+	for i in range(1, mu):
+		cdf[i] = cdf[i-1] + i
+
+	while len(mating_pool) < count:
+		roulette_value = random.random() * rank_sum
+
+		i = 0
+		while cdf[i] < roulette_value:
+			i += 1
+
+		mating_pool.append(candidates[i])
+
+	return mating_pool
+
+# Multi-pointer selection with linear ranking
+def tournament_mps(population, count):
+	mating_pool = []
+
+	candidates = sorted(population, key=lambda x: x["fitness"])
+
+	# We need a lot of offspring for evolution strategy, so instead of working with
+	# floating point value, we transform the "roulette markers" to be integers by
+	# picking the roulette values in the range [0, rank_sum] where the markers are now
+	# just the rank themselves instead of the probability.
+
+	# For multi-pointer selection, we need to additionally multiply by the lambda
+	# because in terms of probability the roulette value is selected in the range [0, 1/lambda]
+	# Again, instead of dividing by lambda we can multiplying all the ranks by lambda to achieve
+	# the same thing. This works because if lambda is in the range [0, rank_sum], then adding
+	# count (count - 1) times to lambda will cover all segments in the interval [0, rank_sum * count].
+
+	mu = len(population)
+	rank_sum = (mu * (mu - 1))/2
+
+	cdf = [0 for i in range(mu)]
+	cdf[0] = mu * count
+
+	# Compute prefix sum
+	for i in range(1, mu):
+		cdf[i] = cdf[i-1] + i * count
+
+	i = mu - 2
+	roulette_value = cdf[-1] - random.random() * rank_sum
+	while len(mating_pool) < count:
+		while cdf[i] < roulette_value:
+			mating_pool.append(candidates[i])
+			roulette_value -= count
+
+		i -= 1
+
+	return mating_pool
 
 
 # roulette wheel tournament
@@ -481,6 +550,7 @@ MAX_GENERATIONS = 250
 DISPLACEMENT_MAX_ATTEMPTS = 5 # maximum number of attempts to before giving up moving a wall in mutation
 SOLUTION_MUTATION_RATE = 0.3 # probablity for a solution to undergo mutation
 INDIVIDUAL_WALL_MUTATION_RATE = 0.4 # probablity for an individual wall to change its position
+SIGMA_INIT = 3.5 # initial value for sigma for each wall
 
 DIRS = [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)]
 
@@ -489,7 +559,8 @@ DIRS = [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)]
 def main():
 	print("\n-> Initializing with population of", POPULATION_SIZE)
 
-	population = [random_solution() for _ in range(POPULATION_SIZE)] 	# dictionary with { "walls": [], and "fitness": n }
+	population = [random_solution(sigma_init=SIGMA_INIT) for _ in range(POPULATION_SIZE)] 	# dictionary with { "walls": [], and "fitness": n }
+	offspring_size = 7 * POPULATION_SIZE
 	generation = 0
 	sigma_bounds = (1, max(PUZZLE_WIDTH, PUZZLE_HEIGHT) // 2)
 	learning_rate = 1 / math.sqrt(MAX_WALLS)
@@ -510,11 +581,18 @@ def main():
 		old_best = best_solution["fitness"]
 		avg_fitness = 0
 		avg_strategy = [0 for i in range(MAX_WALLS)]
+		max_strategy = [float('-inf') for i in range(MAX_WALLS)]
+		min_strategy = [float('inf') for i in range(MAX_WALLS)]
 
 		for p in population:
 			avg_fitness += p["fitness"]
 			for i, v in enumerate(p["sigmas"]):
 				avg_strategy[i] += v
+				if v > max_strategy[i]:
+					max_strategy[i] = v
+
+				if v < min_strategy[i]:
+					min_strategy[i] = v
 
 			if best_solution["generation"] == -1 or p["fitness"] > old_best:
 				best_solution = copy.deepcopy(p)
@@ -531,20 +609,23 @@ def main():
 			avg_strategy[i] = avg_strategy[i] / len(population)
 
 		print("-> Average fitness was ", avg_fitness / len(population))
-		print("-> Average strategy parameter: ", avg_strategy)
+		print("-> Maximum strategy parameter (per wall): ", max_strategy)
+		print("-> Minimum strategy parameter (per wall): ", min_strategy)
+		print("-> Average strategy parameter (per wall): ", avg_strategy)
 
 		print("\n-> Starting generation", generation)
 		print("-> Population size: ", len(population))
 		print(f"-> Best fitness so far is {best_solution['fitness']} (from gen {best_solution['generation']})")
 		print("-> Fitness calculations: ", total_fitness_calculations)
 
-		mating_pool = tournament(population, best_solution["fitness"])
+		# mating_pool = tournament(population, best_solution["fitness"])
+		mating_pool = tournament_roulette(population, offspring_size)
 
 		# run crossover until mating pool is empty
-		while len(mating_pool) > 0:
+		while len(mating_pool) > 2:
 			# pop two random values from the mating pool
-			p1 = mating_pool.pop(random.randint(0, len(mating_pool) - 1))
-			p2 = mating_pool.pop(random.randint(0, len(mating_pool) - 1))
+			p1 = mating_pool.pop()
+			p2 = mating_pool.pop()
 
 			# run crossover on them
 			offspring1, offspring2 = crossover(p1, p2)
@@ -562,10 +643,12 @@ def main():
 
 			offspring.append(offspring1)
 			offspring.append(offspring2)
-			offspring.append(p1)
-			offspring.append(p2)
+			# offspring.append(p1)
+			# offspring.append(p2)
 
-		population = offspring
+		offspring.sort(key=lambda s: s["fitness"], reverse=True)
+
+		population = offspring[:POPULATION_SIZE]
 
 		end_time = time.perf_counter()
 
