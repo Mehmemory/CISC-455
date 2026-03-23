@@ -3,23 +3,22 @@ from collections import deque
 import random
 import copy
 import math
+import time
 
-# Define the puzzle here
-# Wall is #, Space is -, Start pos is O
+from puzzle_loader import load_puzzle
 
-PUZZLE_DATA = [
-	'--####--',
-	'--------',
-	'#------#',
-	'--------',
-	'---##---',
-	'#---O--#',
-	'#--##--#',
-	'#------#'
-]
-MAX_WALLS = 10
+# Define puzzles in the /puzzles folder
+PUZZLE_NAME = "simple2"
 
+# =========================== #
+
+PUZZLE_FILE = load_puzzle(PUZZLE_NAME)
+
+PUZZLE_DATA = PUZZLE_FILE["data"]
 assert len(PUZZLE_DATA) > 0, "Puzzle is empty"
+
+MAX_WALLS = PUZZLE_FILE["walls"]
+OPTIMAL_AREA = PUZZLE_FILE["optimal"]
 
 # =========================== #
 
@@ -68,8 +67,14 @@ for y, row in enumerate(PUZZLE_DATA):
 	r = []
 
 	for x, tile in enumerate(row):
+		lt = tile.lower()
+
 		if tile == "#": r.append(TileType.WATER)
-		elif (tile == "O" or tile == "o"):
+		elif lt == "c": r.append(TileType.CHERRY)
+		elif lt == "a": r.append(TileType.APPLE)
+		elif lt == "b": r.append(TileType.BEES)
+
+		elif lt == "o":
 			assert START_POS is None, "Can't have multiple start positions"
 			r.append(TileType.HORSE)
 			START_POS = Point(x, y)
@@ -110,6 +115,9 @@ def print_puzzle(walls=placed_walls):
 		row = puzzle_str[p.y]
 		puzzle_str[p.y] = row[: p.x] + "@" + row[p.x + 1 :]
 	print("\n".join(puzzle_str))
+
+global total_fitness_calculations
+total_fitness_calculations = 0
 
 # =========================== #
 
@@ -169,6 +177,10 @@ def floodfill(puzzleLayout):
 	return results
 
 def get_fitness(walls, puzzle, defaultEscapes):
+
+	global total_fitness_calculations
+	total_fitness_calculations += 1
+
 	# Calculates fitness based on the number of reachable exits and how long they take to get them compared to a default board
 	# If the horse is fully enclosed, adds additional fitness for each tile and item enclosed
 	# defaultEscapes is a tuple list with 		[0] = coordinates       and 	[1] = depth
@@ -191,18 +203,25 @@ def get_fitness(walls, puzzle, defaultEscapes):
 			fitness += 1 - (0.5)**(diff)
 
 	# for solutions with no escapes, add the number of enclosed tiles to the fitness:
+	enclosed_tiles = 0
+
 	if fitness == len(defaultEscapes):
 		for y in range(PUZZLE_HEIGHT):
 			for x in range(PUZZLE_WIDTH):	# iterate over each cell
 				if flood[y][x] != -1:		# if that cell is enclosed add fitness
-					fitness+=1
+					enclosed_tiles+=1
 					# add additional fitness for cherries, apples, bees
 					if combinedPuzzle[y][x] == TileType.CHERRY:
-						fitness+=3
+						enclosed_tiles+=3
 					elif combinedPuzzle[y][x] == TileType.APPLE:
-						fitness+=10
+						enclosed_tiles+=10
 					elif combinedPuzzle[y][x] == TileType.BEES:
-						fitness-=5
+						enclosed_tiles-=5
+
+	fitness += enclosed_tiles
+
+	if enclosed_tiles >= OPTIMAL_AREA:
+		fitness = math.inf
 
 	return fitness**FITNESS_EXPONENT
 
@@ -223,8 +242,8 @@ def random_solution(sigma_init=3.0):
 	return { "walls": random_wall_positions, "sigmas": default_sigmas, "fitness": get_fitness(random_wall_positions, PUZZLE, defaultExits) }
 
 
-#	Selection via linear ranking
-def tournament(population):
+#	Selection via linear ranking (old)
+def tournament(population, _):
 
 	# Sort by fitness. First element is the lowest, last element is the highest
 	candidates = sorted(population, key = lambda x: x["fitness"])
@@ -234,6 +253,25 @@ def tournament(population):
 
 	# Choose a bunch of candidates based on their weight of being picked
 	return random.choices(candidates, weights=weights, k=MATING_POOL_SIZE)
+
+
+# roulette wheel tournament
+# def tournament(population, total_fitness):
+
+#     average_fitness = total_fitness / POPULATION_SIZE * 2
+#     roulette_value = random.random() * average_fitness
+#     pool = []
+#     i = 0
+
+#     while len(pool) < POPULATION_SIZE:
+#         roulette_value -= population[i]["fitness"]
+#         while roulette_value <= 0:
+#             roulette_value += average_fitness
+#             if len(pool) < POPULATION_SIZE:
+#                 pool.append(population[i])
+#         i+=1
+
+#     return pool
 
 
 def mutate(parent, lr, sigma_bounds):
@@ -437,39 +475,63 @@ def crossover(parent1, parent2):
 
 
 
-POPULATION_SIZE = 500
-MATING_POOL_SIZE = 500
-MAX_GENERATIONS = 1000
+POPULATION_SIZE = 2000
+MATING_POOL_SIZE = POPULATION_SIZE // 2
+MAX_GENERATIONS = 250
 DISPLACEMENT_MAX_ATTEMPTS = 5 # maximum number of attempts to before giving up moving a wall in mutation
-SOLUTION_MUTATION_RATE = 0.4 # probablity for a solution to undergo mutation
-INDIVIDUAL_WALL_MUTATION_RATE = 0.3 # probablity for an individual wall to change its position
+SOLUTION_MUTATION_RATE = 0.3 # probablity for a solution to undergo mutation
+INDIVIDUAL_WALL_MUTATION_RATE = 0.4 # probablity for an individual wall to change its position
 
 DIRS = [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)]
 
 
 
 def main():
+	print("\n-> Initializing with population of", POPULATION_SIZE)
+
 	population = [random_solution() for _ in range(POPULATION_SIZE)] 	# dictionary with { "walls": [], and "fitness": n }
 	generation = 0
 	sigma_bounds = (1, max(PUZZLE_WIDTH, PUZZLE_HEIGHT) // 2)
 	learning_rate = 1 / math.sqrt(MAX_WALLS)
-	total_fitness_calculations = POPULATION_SIZE
-	best_solution = None   # highest fitness so far
+	best_solution = { "generation": -1, "fitness": 0 }   # highest fitness so far
+	global_start_time = time.perf_counter()
+
+	global total_fitness_calculations
 
 	# 	Evolve!
 	while generation < MAX_GENERATIONS:
 		generation += 1
 
+		start_time = time.perf_counter()
+
 		offspring = []
 
-		# check for best solution so far
+		# check for best solution so far + stats from previous generation
+		old_best = best_solution["fitness"] 
+		avg_fitness = 0
+
 		for p in population:
-			if best_solution is None or p["fitness"] > best_solution["fitness"]:
+
+			avg_fitness += p["fitness"]
+
+			if best_solution["generation"] == -1 or p["fitness"] > old_best:
 				best_solution = copy.deepcopy(p)
+				best_solution["generation"] = generation
+				new_best = best_solution["fitness"]
+				print(f"	-> Found a better solution! ({old_best} -> {new_best})")
+				old_best = new_best
 
-		print("-> Starting generation", generation, "\n-> Best fitness so far is", best_solution["fitness"], "\n-> Fitness calculations: ", total_fitness_calculations)
+		if new_best >= math.inf:
+			print(f"-> !!! FOUND OPTIMAL SOLUTION !!!")
+			break		
 
-		mating_pool = tournament(population)
+		print("-> Average fitness was ", avg_fitness / len(population))
+
+		print("\n-> Starting generation", generation)
+		print(f"-> Best fitness so far is {best_solution['fitness']} (from gen {best_solution['generation']})")
+		print("-> Fitness calculations: ", total_fitness_calculations)
+
+		mating_pool = tournament(population, best_solution["fitness"])
 
 		# run crossover until mating pool is empty
 		while len(mating_pool) > 0:
@@ -493,25 +555,37 @@ def main():
 
 			offspring.append(offspring1)
 			offspring.append(offspring2)
-
-			total_fitness_calculations += 2
+			offspring.append(p1)
+			offspring.append(p2)
 
 		population = offspring
 
+		end_time = time.perf_counter()
+
+		print(f"-> Generation took {(end_time - start_time) * 1000.0: .3f} ms")
+
 
 	population = sorted(population, key = lambda x: x["fitness"], reverse=True)
-	fitnesses = list(map(lambda x: x["fitness"], population))
+	# fitnesses = list(map(lambda x: x["fitness"], population))
 
 	print("===========================")
+
 	print("Total fitness calculations:", total_fitness_calculations)
-	print("\nWorst Solution:")
-	print_puzzle(population[-1]["walls"])
-	print(f"Fitness: {population[-1]['fitness']}")
-	print("\nBest Solution:")
+	# print("\nWorst Solution:")
+	# print_puzzle(population[-1]["walls"])
+	# print(f"Fitness: {population[-1]['fitness']}")
+
+	print("\nBest Solution from Last Generation:")
 	print_puzzle(population[0]["walls"])
 	print(f"Fitness: {population[0]['fitness']}")
-	print(f"Population size: {len(population)}")
+
+	print(f"\nBest Solution overall: (from gen {best_solution['generation']})")
+	print_puzzle(best_solution["walls"])
+	print(f"Fitness: {best_solution['fitness']}")
+
+	print(f"\nPopulation size: {len(population)}")
 	print(f"Generations: {generation}")
+	print(f"Time elapsed: {time.perf_counter() - global_start_time: .6f} secs")
 	print("===========================")
 
 
