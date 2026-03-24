@@ -147,7 +147,7 @@ print_puzzle()
 
 # ===========================  FITNESS CALCULATION FUNCTIONS =========================== #
 
-FITNESS_EXPONENT = 2	# scales fitness
+FITNESS_EXPONENT = 1	# scales fitness
 
 def on_edge(pos):
 	# returns true if a given pos is on the edge of the puzzle
@@ -549,13 +549,13 @@ def crossover(parent1, parent2):
 
 
 
-POPULATION_SIZE = 250
+POPULATION_SIZE = 1500
 MATING_POOL_SIZE = POPULATION_SIZE // 2
-MAX_GENERATIONS = 250
+MAX_GENERATIONS = 6000
 DISPLACEMENT_MAX_ATTEMPTS = 5 # maximum number of attempts to before giving up moving a wall in mutation
-SOLUTION_MUTATION_RATE = 0.3 # probablity for a solution to undergo mutation
-INDIVIDUAL_WALL_MUTATION_RATE = 0.4 # probablity for an individual wall to change its position
-SIGMA_INIT = 3.5 # initial value for sigma for each wall
+SOLUTION_MUTATION_RATE = 0.5 # probablity for a solution to undergo mutation
+INDIVIDUAL_WALL_MUTATION_RATE = 0.3 # probablity for an individual wall to change its position
+SIGMA_INIT = 3 # initial value for sigma for each wall
 
 DIRS = [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)]
 
@@ -623,11 +623,11 @@ def main():
 
 		avg_fitness /= len(population)
 
-		print("-> Max strategy / wall:", [round(x, 3) for x in max_strategy])
-		print("-> Min strategy / wall:", [round(x, 3) for x in min_strategy])
-		print("-> Avg strategy / wall:", [round(x, 3) for x in avg_strategy])
+		#print("-> Max strategy / wall:", [round(x, 3) for x in max_strategy])
+		#print("-> Min strategy / wall:", [round(x, 3) for x in min_strategy])
+		#print("-> Avg strategy / wall:", [round(x, 3) for x in avg_strategy])
 		print("->  Avg fitness for gen was", avg_fitness)
-		print("-> Best fitness for gen was", best_in_generation["fitness"])
+		# print("-> Best fitness for gen was", best_in_generation["fitness"])
 		# print_puzzle(best_in_generation["walls"])
 
 		# Write to file
@@ -637,7 +637,6 @@ def main():
 		if best >= math.inf:
 			print(f"-> !!! FOUND OPTIMAL SOLUTION !!!")
 			break
-
 
 		# Start next generation
 
@@ -649,7 +648,7 @@ def main():
 		print("-> Fitness calculations:", total_fitness_calculations)
 
 		# mating_pool = tournament(population, best_solution["fitness"])
-		mating_pool = tournament_roulette(population, offspring_size)
+		mating_pool = tournament(population, offspring_size)
 
 		# run crossover until mating pool is empty
 		while len(mating_pool) > 2:
@@ -673,16 +672,17 @@ def main():
 
 			offspring.append(offspring1)
 			offspring.append(offspring2)
-			# offspring.append(p1)
-			# offspring.append(p2)
+			offspring.append(p1)
+			offspring.append(p2)
 
+		offspring.append(best_solution)
 		offspring.sort(key=lambda s: s["fitness"], reverse=True)
 
 		population = offspring[:POPULATION_SIZE]
 
 		end_time = time.perf_counter()
 
-		print(f"-> Generation took {(end_time - start_time) * 1000.0: .3f} ms")
+		# print(f"-> Generation took {(end_time - start_time) * 1000.0: .3f} ms")
 
 
 	population = sorted(population, key = lambda x: x["fitness"], reverse=True)
