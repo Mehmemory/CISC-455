@@ -4,6 +4,7 @@ import random
 import copy
 import math
 import time
+import os
 
 from puzzle_loader import load_puzzle
 
@@ -548,7 +549,7 @@ def crossover(parent1, parent2):
 
 
 
-POPULATION_SIZE = 2000
+POPULATION_SIZE = 250
 MATING_POOL_SIZE = POPULATION_SIZE // 2
 MAX_GENERATIONS = 250
 DISPLACEMENT_MAX_ATTEMPTS = 5 # maximum number of attempts to before giving up moving a wall in mutation
@@ -570,6 +571,9 @@ def main():
 	learning_rate = 1 / math.sqrt(MAX_WALLS)
 	best_solution = { "generation": -1, "fitness": 0 }   # highest fitness so far
 	global_start_time = time.perf_counter()
+
+	if os.path.exists("last_run.csv"):
+		os.remove("last_run.csv")
 
 	csv = open("last_run.csv", "a", encoding="utf-8")
 	csv.write("Generation, Avg Fitness, Best Fitness, Max Fitness Overall\n")
@@ -619,11 +623,11 @@ def main():
 
 		avg_fitness /= len(population)
 
-		print("-> Max strategy / wall: ", [round(x, 3) for x in max_strategy])
-		print("-> Min strategy / wall: ", [round(x, 3) for x in min_strategy])
-		print("-> Avg strategy / wall: ", [round(x, 3) for x in avg_strategy])
-		print("-> Average fitness was ", avg_fitness)
-		print("-> Best fitness was ", best_in_generation["fitness"])
+		print("-> Max strategy / wall:", [round(x, 3) for x in max_strategy])
+		print("-> Min strategy / wall:", [round(x, 3) for x in min_strategy])
+		print("-> Avg strategy / wall:", [round(x, 3) for x in avg_strategy])
+		print("->  Avg fitness for gen was", avg_fitness)
+		print("-> Best fitness for gen was", best_in_generation["fitness"])
 		# print_puzzle(best_in_generation["walls"])
 
 		# Write to file
@@ -640,9 +644,9 @@ def main():
 		generation += 1
 
 		print("\n-> Starting generation", generation)
-		print("-> Population size: ", len(population))
+		print("-> Population size:", len(population))
 		print(f"-> Best fitness so far is {best_solution['fitness']} (from gen {best_solution['generation']})")
-		print("-> Fitness calculations: ", total_fitness_calculations)
+		print("-> Fitness calculations:", total_fitness_calculations)
 
 		# mating_pool = tournament(population, best_solution["fitness"])
 		mating_pool = tournament_roulette(population, offspring_size)
