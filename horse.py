@@ -8,7 +8,7 @@ import time
 from puzzle_loader import load_puzzle
 
 # Define puzzles in the /puzzles folder
-PUZZLE_NAME = "simple2"
+PUZZLE_NAME = "maze"
 
 # =========================== #
 
@@ -571,25 +571,34 @@ def main():
 	best_solution = { "generation": -1, "fitness": 0 }   # highest fitness so far
 	global_start_time = time.perf_counter()
 
+	csv = open("last_run.csv", "a", encoding="utf-8")
+	csv.write("Generation, Avg Fitness, Best Fitness, Max Fitness Overall\n")
+
 	global total_fitness_calculations
 
 	# 	Evolve!
 	while generation < MAX_GENERATIONS:
-		generation += 1
+
+		# Process previous generation
 
 		start_time = time.perf_counter()
 
 		offspring = []
 
 		# check for best solution so far + stats from previous generation
-		old_best = best_solution["fitness"]
+		best = best_solution["fitness"]
 		avg_fitness = 0
+		best_in_generation = { "fitness": 0 }
 		avg_strategy = [0 for i in range(MAX_WALLS)]
 		max_strategy = [float('-inf') for i in range(MAX_WALLS)]
 		min_strategy = [float('inf') for i in range(MAX_WALLS)]
 
 		for p in population:
-			avg_fitness += p["fitness"]
+			fit = p["fitness"]
+
+			avg_fitness += fit
+			if fit > best_in_generation["fitness"]: best_in_generation = p
+
 			for i, v in enumerate(p["sigmas"]):
 				avg_strategy[i] += v
 				if v > max_strategy[i]:
@@ -598,24 +607,37 @@ def main():
 				if v < min_strategy[i]:
 					min_strategy[i] = v
 
-			if best_solution["generation"] == -1 or p["fitness"] > old_best:
+			if best_solution["generation"] == -1 or fit > best:
 				best_solution = copy.deepcopy(p)
 				best_solution["generation"] = generation
 				new_best = best_solution["fitness"]
-				print(f"	-> Found a better solution! ({old_best} -> {new_best})")
-				old_best = new_best
-
-		if new_best >= math.inf:
-			print(f"-> !!! FOUND OPTIMAL SOLUTION !!!")
-			break
+				print(f"	-> Found a better solution! ({best} -> {new_best})")
+				best = new_best
 
 		for i in range(MAX_WALLS):
 			avg_strategy[i] = avg_strategy[i] / len(population)
 
-		print("-> Average fitness was ", avg_fitness / len(population))
-		print("-> Maximum strategy parameter (per wall): ", max_strategy)
-		print("-> Minimum strategy parameter (per wall): ", min_strategy)
-		print("-> Average strategy parameter (per wall): ", avg_strategy)
+		avg_fitness /= len(population)
+
+		print("-> Max strategy / wall: ", [round(x, 3) for x in max_strategy])
+		print("-> Min strategy / wall: ", [round(x, 3) for x in min_strategy])
+		print("-> Avg strategy / wall: ", [round(x, 3) for x in avg_strategy])
+		print("-> Average fitness was ", avg_fitness)
+		print("-> Best fitness was ", best_in_generation["fitness"])
+		# print_puzzle(best_in_generation["walls"])
+
+		# Write to file
+		csv.write(f"{generation},{avg_fitness: .4f},{best_in_generation['fitness']},{best}\n")
+		csv.flush()
+
+		if best >= math.inf:
+			print(f"-> !!! FOUND OPTIMAL SOLUTION !!!")
+			break
+
+
+		# Start next generation
+
+		generation += 1
 
 		print("\n-> Starting generation", generation)
 		print("-> Population size: ", len(population))
@@ -681,6 +703,11 @@ def main():
 	print(f"Generations: {generation}")
 	print(f"Time elapsed: {time.perf_counter() - global_start_time: .6f} secs")
 	print("===========================")
+
+
+	# Store last run in csv
+	csv.close()
+	print("Saved to list_run.csv")
 
 
 if __name__ == '__main__':
