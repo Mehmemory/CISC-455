@@ -8,8 +8,6 @@ import os
 
 from puzzle_loader import load_puzzle
 
-from plot_stats import plot_statistics
-
 # Define puzzles in the /puzzles folder
 PUZZLE_NAME = "maze"
 
@@ -224,7 +222,7 @@ def get_fitness(walls, puzzle, defaultEscapes):
 	fitness += enclosed_tiles
 
 	if enclosed_tiles >= OPTIMAL_AREA:
-		return float('inf')
+		fitness = math.inf
 
 	return fitness**FITNESS_EXPONENT
 
@@ -294,7 +292,7 @@ def tournament_roulette(population, count):
 def tournament_mps(population, count):
 	mating_pool = []
 
-	candidates = sorted(population, key=lambda x: x[0]["fitness"])
+	candidates = sorted(population, key=lambda x: x["fitness"])
 
 	# We need a lot of offspring for evolution strategy, so instead of working with
 	# floating point value, we transform the "roulette markers" to be integers by
@@ -555,22 +553,22 @@ POPULATION_SIZE = 250
 MATING_POOL_SIZE = POPULATION_SIZE // 2
 MAX_GENERATIONS = 250
 DISPLACEMENT_MAX_ATTEMPTS = 5 # maximum number of attempts to before giving up moving a wall in mutation
-SOLUTION_MUTATION_RATE = 0.4 # probablity for a solution to undergo mutation
-INDIVIDUAL_WALL_MUTATION_RATE = 0.6 # probablity for an individual wall to change its position
-SIGMA_INIT = 2 # initial value for sigma for each wall
-AGE_THRESHOLD = 10 # maximum amount of generations a solution can stay in the population pool
+SOLUTION_MUTATION_RATE = 0.3 # probablity for a solution to undergo mutation
+INDIVIDUAL_WALL_MUTATION_RATE = 0.4 # probablity for an individual wall to change its position
+SIGMA_INIT = 3.5 # initial value for sigma for each wall
 
-# DIRS = [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)]
+DIRS = [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)]
+
+
 
 def main():
 	print("\n-> Initializing with population of", POPULATION_SIZE)
 
-	population = [(random_solution(sigma_init=SIGMA_INIT), 0) for _ in range(POPULATION_SIZE)] 	# dictionary with { "walls": [], and "fitness": n }
-	offspring_size = 4 * POPULATION_SIZE
+	population = [random_solution(sigma_init=SIGMA_INIT) for _ in range(POPULATION_SIZE)] 	# dictionary with { "walls": [], and "fitness": n }
+	offspring_size = 7 * POPULATION_SIZE
 	generation = 0
 	sigma_bounds = (1, max(PUZZLE_WIDTH, PUZZLE_HEIGHT) // 2)
-	learning_rate = 1 / math.sqrt(4 * math.sqrt(max(PUZZLE_WIDTH, PUZZLE_HEIGHT) ))
-	print(learning_rate)
+	learning_rate = 1 / math.sqrt(MAX_WALLS)
 	best_solution = { "generation": -1, "fitness": 0 }   # highest fitness so far
 	global_start_time = time.perf_counter()
 
@@ -578,16 +576,9 @@ def main():
 		os.remove("last_run.csv")
 
 	csv = open("last_run.csv", "a", encoding="utf-8")
-	csv.write("Generation, Avg Fitness, Max Fitness, Min Fitness, Best Fitness, Max Fitness Overall\n")
+	csv.write("Generation, Avg Fitness, Best Fitness, Max Fitness Overall\n")
 
 	global total_fitness_calculations
-
-	avg_fitness = []
-	max_fitness = []
-	min_fitness = []
-	avg_strategy = []
-	max_strategy = []
-	min_strategy = []
 
 	# 	Evolve!
 	while generation < MAX_GENERATIONS:
@@ -598,36 +589,27 @@ def main():
 
 		offspring = []
 
-		avg_fitness.append(0)
-		max_fitness.append(float('-inf'))
-		min_fitness.append(float('inf'))
-		avg_strategy.append([0 for _ in range(MAX_WALLS)])
-		max_strategy.append([float('-inf') for i in range(MAX_WALLS)])
-		min_strategy.append([float('inf') for i in range(MAX_WALLS)])
-
 		# check for best solution so far + stats from previous generation
 		best = best_solution["fitness"]
+		avg_fitness = 0
 		best_in_generation = { "fitness": 0 }
+		avg_strategy = [0 for i in range(MAX_WALLS)]
+		max_strategy = [float('-inf') for i in range(MAX_WALLS)]
+		min_strategy = [float('inf') for i in range(MAX_WALLS)]
 
-		for p, age in population:
+		for p in population:
 			fit = p["fitness"]
 
-			if fit > max_fitness[-1]:
-				max_fitness[-1] = fit
-			if fit < min_fitness[-1]:
-				min_fitness[-1] = fit
-
-			avg_fitness[-1] += fit
-			if fit > best_in_generation["fitness"]:
-				best_in_generation = p
+			avg_fitness += fit
+			if fit > best_in_generation["fitness"]: best_in_generation = p
 
 			for i, v in enumerate(p["sigmas"]):
-				avg_strategy[-1][i] += v
-				if v > max_strategy[-1][i]:
-					max_strategy[-1][i] = v
+				avg_strategy[i] += v
+				if v > max_strategy[i]:
+					max_strategy[i] = v
 
-				if v < min_strategy[-1][i]:
-					min_strategy[-1][i] = v
+				if v < min_strategy[i]:
+					min_strategy[i] = v
 
 			if best_solution["generation"] == -1 or fit > best:
 				best_solution = copy.deepcopy(p)
@@ -637,25 +619,19 @@ def main():
 				best = new_best
 
 		for i in range(MAX_WALLS):
-			avg_strategy[-1][i] = avg_strategy[-1][i] / len(population)
+			avg_strategy[i] = avg_strategy[i] / len(population)
 
-		avg_fitness[-1] /= POPULATION_SIZE
+		avg_fitness /= len(population)
 
-		if best == float('inf'):
-			print(f"-> !!! FOUND OPTIMAL SOLUTION !!!")
-			break
-
-
-		print("-> Max strategy / wall: ", [round(x, 3) for x in max_strategy[-1]])
-		print("-> Min strategy / wall: ", [round(x, 3) for x in min_strategy[-1]])
-		print("-> Avg strategy / wall: ", [round(x, 3) for x in avg_strategy[-1]])
-		print("-> Max fitness for gen was ", max_fitness[-1])
-		print("-> Min fitness for gen was ", min_fitness[-1])
-		print("-> Avg fitness for gen was ", avg_fitness[-1])
+		print("-> Max strategy / wall:", [round(x, 3) for x in max_strategy])
+		print("-> Min strategy / wall:", [round(x, 3) for x in min_strategy])
+		print("-> Avg strategy / wall:", [round(x, 3) for x in avg_strategy])
+		print("->  Avg fitness for gen was", avg_fitness)
+		print("-> Best fitness for gen was", best_in_generation["fitness"])
 		# print_puzzle(best_in_generation["walls"])
 
 		# Write to file
-		csv.write(f"{generation},{avg_fitness[-1]: .4f},{max_fitness[-1]: .4f},{min_fitness[-1]: .4f},{best_in_generation['fitness']},{best}\n")
+		csv.write(f"{generation},{avg_fitness: .4f},{best_in_generation['fitness']},{best}\n")
 		csv.flush()
 
 		if best >= math.inf:
@@ -664,6 +640,7 @@ def main():
 
 
 		# Start next generation
+
 		generation += 1
 
 		print("\n-> Starting generation", generation)
@@ -672,7 +649,7 @@ def main():
 		print("-> Fitness calculations:", total_fitness_calculations)
 
 		# mating_pool = tournament(population, best_solution["fitness"])
-		mating_pool = tournament_mps(population, offspring_size)
+		mating_pool = tournament_roulette(population, offspring_size)
 
 		# run crossover until mating pool is empty
 		while len(mating_pool) > 2:
@@ -681,7 +658,7 @@ def main():
 			p2 = mating_pool.pop()
 
 			# run crossover on them
-			offspring1, offspring2 = crossover(p1[0], p2[0])
+			offspring1, offspring2 = crossover(p1, p2)
 
 			# mutate and add to offspring list
 			if random.random() < SOLUTION_MUTATION_RATE:
@@ -694,15 +671,12 @@ def main():
 			offspring1["fitness"] = get_fitness(offspring1["walls"], PUZZLE, defaultExits)
 			offspring2["fitness"] = get_fitness(offspring2["walls"], PUZZLE, defaultExits)
 
-			offspring.append((offspring1, generation))
-			offspring.append((offspring2, generation))
+			offspring.append(offspring1)
+			offspring.append(offspring2)
+			# offspring.append(p1)
+			# offspring.append(p2)
 
-			if generation - p1[1]< AGE_THRESHOLD:
-				offspring.append(p1)
-			if generation - p2[1] < AGE_THRESHOLD:
-				offspring.append(p2)
-
-		offspring.sort(key=lambda s: s[0]["fitness"], reverse=True)
+		offspring.sort(key=lambda s: s["fitness"], reverse=True)
 
 		population = offspring[:POPULATION_SIZE]
 
@@ -711,7 +685,7 @@ def main():
 		print(f"-> Generation took {(end_time - start_time) * 1000.0: .3f} ms")
 
 
-	population = sorted(population, key = lambda x: x[0]["fitness"], reverse=True)
+	population = sorted(population, key = lambda x: x["fitness"], reverse=True)
 	# fitnesses = list(map(lambda x: x["fitness"], population))
 
 	print("===========================")
@@ -722,8 +696,8 @@ def main():
 	# print(f"Fitness: {population[-1]['fitness']}")
 
 	print("\nBest Solution from Last Generation:")
-	print_puzzle(population[0][0]["walls"])
-	print(f"Fitness: {population[0][0]['fitness']}")
+	print_puzzle(population[0]["walls"])
+	print(f"Fitness: {population[0]['fitness']}")
 
 	print(f"\nBest Solution overall: (from gen {best_solution['generation']})")
 	print_puzzle(best_solution["walls"])
@@ -738,16 +712,6 @@ def main():
 	# Store last run in csv
 	csv.close()
 	print("Saved to list_run.csv")
-
-	plot_statistics(
-		avg_fitness=avg_fitness,
-		max_fitness=max_fitness,
-		min_fitness=min_fitness,
-		avg_strategy=avg_strategy,
-		max_strategy=max_strategy,
-		min_strategy=min_strategy,
-		puzzle_name=PUZZLE_NAME
-	)
 
 
 if __name__ == '__main__':
