@@ -11,7 +11,7 @@ from puzzle_loader import load_puzzle
 from plot_stats import plot_statistics
 
 # Define puzzles in the /puzzles folder
-PUZZLE_NAME = "maze"
+PUZZLE_NAME = "day46"
 
 # =========================== #
 
@@ -124,31 +124,6 @@ def print_puzzle(walls=placed_walls):
 global total_fitness_calculations
 total_fitness_calculations = 0
 
-# =========================== #
-
-# TESTS TO MAKE SURE THIS WORKS
-"""
-print(f"Puzzle size is {PUZZLE_WIDTH} x {PUZZLE_HEIGHT}")
-print(f"Start position is {START_POS}")
-
-add_wall(Point(0, 0))
-add_wall(1, 0)
-add_wall(0, 1)
-add_wall(1, 1)
-
-print(f"(3, 0) is wall: {is_wall(3, 0)}")
-print(f"(7, 0) is wall: {is_wall(7, 0)}")
-print(f"(1, 1) is wall: {is_wall(1, 1)}")
-remove_wall(Point(1, 1))
-print(f"(1, 1) is still wall: {is_wall(1, 1)}")
-
-print(f"(1, 1) + (1, 3) = {Point(1, 1) + Point(1, 3)}")
-print(f"(1, 1) + (1, 4) = {Point(1, 1).move(1, 4)}")
-print(f"Walls: {list_walls()}")
-print_puzzle()
-"""
-
-
 # ===========================  FITNESS CALCULATION FUNCTIONS =========================== #
 
 FITNESS_EXPONENT = 1	# scales fitness
@@ -246,8 +221,7 @@ def random_solution(sigma_init=3.0):
 	default_sigmas = [sigma_init for _ in range(MAX_WALLS)]
 	return { "walls": random_wall_positions, "sigmas": default_sigmas, "fitness": get_fitness(random_wall_positions, PUZZLE, defaultExits) }
 
-
-#	Selection via linear ranking (old)
+#	Selection via linear ranking
 def tournament(population):
 
 	# Sort by fitness. First element is the lowest, last element is the highest
@@ -258,99 +232,6 @@ def tournament(population):
 
 	# Choose a bunch of candidates based on their weight of being picked
 	return random.choices(candidates, weights=weights, k=MATING_POOL_SIZE)
-
-# Roulette selection with linear ranking
-def tournament_roulette(population, count):
-	mating_pool = []
-
-	candidates = sorted(population, key=lambda x: x["fitness"])
-
-	# We need a lot of offspring for evolution strategy, so instead of working with
-	# floating point value, we transform the "roulette markers" to be integers by
-	# picking the roulette values in the range [0, rank_sum] where the markers are now
-	# just the rank themselves instead of the probability.
-
-	mu = len(population)
-	rank_sum = (mu * (mu - 1))/2
-
-	cdf = [0 for i in range(mu)]
-
-	# Compute prefix sum
-	for i in range(1, mu):
-		cdf[i] = cdf[i-1] + i
-
-	while len(mating_pool) < count:
-		roulette_value = random.random() * rank_sum
-
-		i = 0
-		while cdf[i] < roulette_value:
-			i += 1
-
-		mating_pool.append(candidates[i])
-
-	random.shuffle(mating_pool)
-
-	return mating_pool
-
-# Multi-pointer selection with linear ranking
-def tournament_mps(population, count):
-	mating_pool = []
-
-	candidates = sorted(population, key=lambda x: x["fitness"])
-
-	# We need a lot of offspring for evolution strategy, so instead of working with
-	# floating point value, we transform the "roulette markers" to be integers by
-	# picking the roulette values in the range [0, rank_sum] where the markers are now
-	# just the rank themselves instead of the probability.
-
-	# For multi-pointer selection, we need to additionally multiply by the lambda
-	# because in terms of probability the roulette value is selected in the range [0, 1/lambda]
-	# Again, instead of dividing by lambda we can multiplying all the ranks by lambda to achieve
-	# the same thing. This works because if lambda is in the range [0, rank_sum], then adding
-	# count (count - 1) times to lambda will cover all segments in the interval [0, rank_sum * count].
-
-	mu = len(population)
-	rank_sum = (mu * (mu - 1))/2
-
-	cdf = [0 for i in range(mu)]
-	cdf[0] = mu * count
-
-	# Compute prefix sum
-	for i in range(1, mu):
-		cdf[i] = cdf[i-1] + i * count
-
-	i = mu - 2
-	roulette_value = cdf[-1] - random.random() * rank_sum
-	while len(mating_pool) < count:
-		while cdf[i] < roulette_value:
-			mating_pool.append(candidates[i])
-			roulette_value -= count
-
-		i -= 1
-
-	random.shuffle(mating_pool)
-
-	return mating_pool
-
-
-# roulette wheel tournament
-# def tournament(population, total_fitness):
-
-#     average_fitness = total_fitness / POPULATION_SIZE * 2
-#     roulette_value = random.random() * average_fitness
-#     pool = []
-#     i = 0
-
-#     while len(pool) < POPULATION_SIZE:
-#         roulette_value -= population[i]["fitness"]
-#         while roulette_value <= 0:
-#             roulette_value += average_fitness
-#             if len(pool) < POPULATION_SIZE:
-#                 pool.append(population[i])
-#         i+=1
-
-#     return pool
-
 
 def mutate(parent, lr, sigma_bounds):
 	"""
@@ -426,54 +307,12 @@ def mutate(parent, lr, sigma_bounds):
 			filledspaces.add(new_wall) #add new wall to set so that it is not chosen again for subsequent walls in this mutation
 			filledspaces.remove(wall)
 
-		# # Get possible positions for the wall to be moved to
-		# possible_positions = []
-
-		# queue = deque()
-
-		# for dir in DIRS:
-		# 	new_pos = wall + dir
-		# 	if (0 <= new_pos.x < PUZZLE_WIDTH and 0 <= new_pos.y < PUZZLE_HEIGHT):
-		# 		queue.append((new_pos, 1))
-
-		# # Perform BFS to discover all admissible wall positions within a circle around the
-		# # current wall position with radius == displacement_radius
-		# while len(queue) > 0:
-		# 	curr_pos, curr_dist = queue.popleft()
-
-		# 	if PUZZLE[curr_pos.y][curr_pos.x] == TileType.SPACE:
-		# 		possible_positions.append(curr_pos)
-
-		# 	# If the current dist is equal or greater than the displacement radius, stop further
-		# 	# searches
-		# 	if curr_dist >= displacement_radius:
-		# 		continue
-
-		# 	for dir in DIRS:
-		# 		new_pos = curr_pos + dir
-
-		# 		if (0 <= new_pos.x < PUZZLE_WIDTH and 0 <= new_pos.y < PUZZLE_HEIGHT):
-		# 			queue.append((new_pos, curr_dist + 1))
-
-		# # If there are no positions the wall can be moved to, keep it where it is
-		# if len(possible_positions) == 0:
-		# 	new_walls.append(wall)
-		# else:
-		# 	new_wall = random.choice(possible_positions)
-		# 	new_walls.append(new_wall)
-		# 	# Remove the old wall's position and add the new wall's position to
-		# 	# the occupied walls set so subsequently displaced walls can not
-		# 	# choose the same position
-		# 	occupied_walls.remove(wall)
-		# 	occupied_walls.add(new_wall)
-
 	child = dict(
 		sigmas=child_sigmas,
 		walls=child_walls,
 	)
 
 	return child
-
 
 def crossover(parent1, parent2):
 	# combine walls from 2 parents
@@ -552,24 +391,20 @@ def crossover(parent1, parent2):
 	return { "walls": list(child_a_walls), "sigmas": sigma_a }, { "walls": list(child_b_walls), "sigmas": sigma_b }
 
 
-
 POPULATION_SIZE = 1500
-MATING_POOL_SIZE = POPULATION_SIZE // 2
-MAX_GENERATIONS = 1000
+MATING_POOL_SIZE = POPULATION_SIZE//2
+MAX_GENERATIONS = 500
 DISPLACEMENT_MAX_ATTEMPTS = 5 # maximum number of attempts to before giving up moving a wall in mutation
 SOLUTION_MUTATION_RATE = 0.5 # probablity for a solution to undergo mutation
 INDIVIDUAL_WALL_MUTATION_RATE = 0.3 # probablity for an individual wall to change its position
 SIGMA_INIT = 3 # initial value for sigma for each wall
-
 DIRS = [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)]
-
 
 
 def main():
 	print("\n-> Initializing with population of", POPULATION_SIZE)
 
 	population = [random_solution(sigma_init=SIGMA_INIT) for _ in range(POPULATION_SIZE)] 	# dictionary with { "walls": [], and "fitness": n }
-	offspring_size = 4 * POPULATION_SIZE
 	generation = 0
 	max_dim = max(PUZZLE_WIDTH, PUZZLE_HEIGHT)
 	sigma_bounds = (1, max_dim // 2)
@@ -661,7 +496,7 @@ def main():
 		generation += 1
 
 		print("\n-> Starting generation", generation)
-		print("-> Population size:", len(population))
+		# print("-> Population size:", len(population))
 		print(f"-> Best fitness so far is {best_solution['fitness']} (from gen {best_solution['generation']})")
 		print("-> Fitness calculations:", total_fitness_calculations)
 
@@ -693,7 +528,7 @@ def main():
 			offspring.append(p1)
 			offspring.append(p2)
 
-		offspring.append(best_solution)
+		offspring.append(best_solution)	# add a copy of best solution to each generation (Elitism)
 		offspring.sort(key=lambda s: s["fitness"], reverse=True)
 
 		population = offspring[:POPULATION_SIZE]
@@ -713,9 +548,9 @@ def main():
 	# print_puzzle(population[-1]["walls"])
 	# print(f"Fitness: {population[-1]['fitness']}")
 
-	print("\nBest Solution from Last Generation:")
-	print_puzzle(population[0]["walls"])
-	print(f"Fitness: {population[0]['fitness']}")
+	#print("\nBest Solution from Last Generation:")
+	#print_puzzle(population[0]["walls"])
+	#print(f"Fitness: {population[0]['fitness']}")
 
 	print(f"\nBest Solution overall: (from gen {best_solution['generation']})")
 	print_puzzle(best_solution["walls"])
@@ -726,11 +561,9 @@ def main():
 	print(f"Time elapsed: {time.perf_counter() - global_start_time: .6f} secs")
 	print("===========================")
 
-
 	# Store last run in csv
 	csv.close()
 	print("Saved to list_run.csv")
-
 
 	if SHOW_PLOTS:
 		# Plot statistics
@@ -743,7 +576,6 @@ def main():
 			min_strategy=min_strategy,
 			puzzle_name=PUZZLE_NAME
 		)
-
 
 if __name__ == '__main__':
 	main()
