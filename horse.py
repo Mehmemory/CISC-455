@@ -4,7 +4,6 @@ import random
 import copy
 import math
 import time
-import os
 
 from puzzle_loader import load_puzzle
 

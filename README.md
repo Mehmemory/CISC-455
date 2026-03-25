@@ -65,4 +65,4 @@ The constant `SHOW_PLOTS` controls whether a plot of statistics is shown at the 
 > pip install matplotlib numpy
 > ```
 
-There are two plots available to be viewed One for the strategy parameter (mutation step size) and one for fitness. Both plots graphs the average, maximum and minimum of their respective statistics versus the generation number.
+There are two plots available to be viewed - one for the strategy parameter (mutation step size) and one for fitness. Both plots graphs the average, maximum and minimum of their respective statistics versus the generation number.
