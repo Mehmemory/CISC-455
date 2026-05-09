@@ -10,24 +10,19 @@ from puzzle_loader import load_puzzle
 from plot_stats import plot_statistics
 
 # Define puzzles in the /puzzles folder
-PUZZLE_NAME = "day119"
+PUZZLE_NAME = "day46"
 
 # =========================== #
 
 SHOW_PLOTS = True
+
 PUZZLE_FILE = load_puzzle(PUZZLE_NAME)
+
 PUZZLE_DATA = PUZZLE_FILE["data"]
 assert len(PUZZLE_DATA) > 0, "Puzzle is empty"
+
 MAX_WALLS = PUZZLE_FILE["walls"]
 OPTIMAL_AREA = PUZZLE_FILE["optimal"]
-
-# ============ PARAMETERS ============ #
-POPULATION_SIZE = 450
-MATING_POOL_SIZE = POPULATION_SIZE//3
-MAX_GENERATIONS = 600
-SOLUTION_MUTATION_RATE = 0.15 # probablity for a solution to undergo mutation
-INDIVIDUAL_WALL_MUTATION_RATE = 1/MAX_WALLS # probablity for an individual wall to change its position
-USELESS_WALL_MUTATION_RATE = 0.8
 
 # =========================== #
 
@@ -39,7 +34,6 @@ class TileType(Enum):
 	CHERRY = 2
 	APPLE = 3
 	BEES = 4
-	PORTAL = 5
 
 	def __str__(self):
 		return self.name
@@ -68,7 +62,6 @@ valid_walls = []			# walls CAN be placed here
 
 # Constants and puzzle creation
 PUZZLE = []
-PORTALS = [[] for _ in range(10)] # 10 portal slots (digits from 0-9)
 PUZZLE_HEIGHT = len(PUZZLE_DATA)
 PUZZLE_WIDTH = len(PUZZLE_DATA[0])
 START_POS = None
@@ -89,10 +82,6 @@ for y, row in enumerate(PUZZLE_DATA):
 			assert START_POS is None, "Can't have multiple start positions"
 			r.append(TileType.HORSE)
 			START_POS = Point(x, y)
-		elif lt.isdigit():		# digit means portal
-			r.append(TileType.PORTAL)
-			portalID = int(lt)	# digit corresponds to portal id
-			PORTALS[portalID].append(Point(x,y))
 		else:
 			r.append(TileType.SPACE)
 			valid_walls.append(Point(x, y))
@@ -136,7 +125,7 @@ total_fitness_calculations = 0
 
 # ===========================  FITNESS CALCULATION FUNCTIONS =========================== #
 
-DIRS = [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)]
+FITNESS_EXPONENT = 1	# scales fitness
 
 def on_edge(pos):
 	# returns true if a given pos is on the edge of the puzzle
@@ -152,9 +141,10 @@ def floodfill(puzzleLayout):
 	if not on_edge(START_POS):
 		queue.append((START_POS, 0))		# add startpos to the queue and note that it takes 0 steps to get there
 
+	neighbors = [Point(-1,0), Point(1,0), Point(0,-1), Point(0,1)]
 	while queue:
 		cur = queue.popleft()
-		for p in DIRS:	# checks each neighbor around current
+		for p in neighbors:	# checks each neighbor around current
 			next = cur[0]+p
 
 			# if the tile hasn't been checked yet and it's not water...
@@ -162,17 +152,10 @@ def floodfill(puzzleLayout):
 				results[next.y][next.x] = cur[1]+1	# update results
 				if not on_edge(next):	# add to queue if its not on the edge
 					queue.append((next, cur[1]+1))
-				if puzzleLayout[next.y][next.x] == TileType.PORTAL:	# portals
-					id = int(PUZZLE_DATA[next.y][next.x])
-					for p in PORTALS[id]:	# add all linked portals to the queue
-						if results[p.y][p.x] == -1:
-							results[p.y][p.x] = cur[1]+1
-							if not on_edge(p):
-								queue.append((p, cur[1]+1))
 
 	return results
 
-def get_fitness(walls):
+def get_fitness(walls, puzzle, defaultEscapes):
 
 	global total_fitness_calculations
 	total_fitness_calculations += 1
@@ -182,8 +165,8 @@ def get_fitness(walls):
 	# defaultEscapes is a tuple list with 		[0] = coordinates       and 	[1] = depth
 
 	# create a temporary puzzle layout that counts walls as water (since they function the same)
-	fitness = len(defaultExits) * -1
-	combinedPuzzle = [row[:] for row in PUZZLE]
+	fitness = 0
+	combinedPuzzle = [row[:] for row in puzzle]
 	for w in walls:
 		combinedPuzzle[w.y][w.x] = TileType.WATER
 
@@ -191,7 +174,7 @@ def get_fitness(walls):
 	flood = floodfill(combinedPuzzle)
 
 	# Subtract fitness based on how many escapes possible and how long (compared to default) it takes to get to each
-	for pos, defaultDepth in defaultExits:
+	for pos, defaultDepth in defaultEscapes:
 		if flood[pos.y][pos.x] == -1:
 			fitness+=1
 		else:
@@ -199,44 +182,27 @@ def get_fitness(walls):
 			fitness += 1 - (0.5)**(diff)
 
 	# for solutions with no escapes, add the number of enclosed tiles to the fitness:
-	useless_walls = [0]*MAX_WALLS
-	if fitness == 0:
+	enclosed_tiles = 0
 
-		# add score from enclosed tiles + items
+	if fitness == len(defaultEscapes):
 		for y in range(PUZZLE_HEIGHT):
 			for x in range(PUZZLE_WIDTH):	# iterate over each cell
 				if flood[y][x] != -1:		# if that cell is enclosed add fitness
-					fitness+=1
+					enclosed_tiles+=1
 					# add additional fitness for cherries, apples, bees
 					if combinedPuzzle[y][x] == TileType.CHERRY:
-						fitness+=3
+						enclosed_tiles+=3
 					elif combinedPuzzle[y][x] == TileType.APPLE:
-						fitness+=10
+						enclosed_tiles+=10
 					elif combinedPuzzle[y][x] == TileType.BEES:
-						fitness-=5
-	
+						enclosed_tiles-=5
 
-		# Find useful walls by checking to see if it's next to an enclosed tile:
-		i = 0
-		for w in walls:
-			useful = False
-			for d in DIRS:
-				neighbor = w+d
+	fitness += enclosed_tiles
 
-				if neighbor.x >= 0 and neighbor.x < PUZZLE_WIDTH and neighbor.y >= 0 and neighbor.y < PUZZLE_HEIGHT: 
-					if flood[neighbor.y][neighbor.x] >= 0:
-						useful = True
-						break
-			if not useful:
-				useless_walls[i] = 1
-			i+=1
-	
-	else:	# If not enclosed, -100 fitness to prevent negative score enclosed solutions being coutned as worse
-		fitness -= 100
-	if fitness >= OPTIMAL_AREA:
+	if enclosed_tiles >= OPTIMAL_AREA:
 		fitness = math.inf
 
-	return fitness, useless_walls
+	return fitness**FITNESS_EXPONENT
 
 # Find default escapes (needed for fitness evaluation):
 defaultExits = []
@@ -249,118 +215,100 @@ for y in range(PUZZLE_HEIGHT):
 # ===========================  END OF FITNESS CALCULATION FUNCTIONS =========================== #
 
 #  Create a random solution that just picks from random available wall positions
-def random_solution():
+def random_solution(sigma_init=3.0):
 	random_wall_positions = random.sample(valid_walls, MAX_WALLS)
-	fitness, uw = get_fitness(random_wall_positions)
-	return { "walls": random_wall_positions, "fitness": fitness, "useless_walls": uw}
+	default_sigmas = [sigma_init for _ in range(MAX_WALLS)]
+	return { "walls": random_wall_positions, "sigmas": default_sigmas, "fitness": get_fitness(random_wall_positions, PUZZLE, defaultExits) }
 
 #	Selection via linear ranking
 def tournament(population):
+
 	# Sort by fitness. First element is the lowest, last element is the highest
 	candidates = sorted(population, key = lambda x: x["fitness"])
+
 	# Get the weight of each index ([1, 2, 3, 4, 5, ... n-1, n])
 	weights = range(1, len(candidates) + 1)
+
 	# Choose a bunch of candidates based on their weight of being picked
 	return random.choices(candidates, weights=weights, k=MATING_POOL_SIZE)
 
-# ============= MUTATION =================== #
-def mutate(parent):
+def mutate(parent, lr, sigma_bounds):
 	"""
-	Every wall has a chance to mutate, 'useless' walls have a higher chance to mutate
-	mutations can be 1 of 3 kinds:
-		1) mutate to any random open tile
-		2) mutate to a random open tile within 2x2 if the wall
-		3) mutate adjacent to another random wall
+	Generate a mutated solution using a Gaussian mutation step size and self-adaptation.
+
+	Parameters:
+		parent       : (dict) A single solution.
+		lr           : (float) learning rate.
+		sigma_bounds : (float) Lower and upper boundary for sigma.
+
+	Returns:
+		child        : (dict) A new mutated solution.
 	"""
+	sigma_lb, sigma_ub = sigma_bounds
+
+	parent_sigmas = parent["sigmas"] # Sigma corresponding to the parent
 	parent_walls = parent["walls"] # Walls from the parent solution
-	useless_walls = parent["useless_walls"]
 	filledspaces = set(parent_walls) # set of unique walls to check for duplicates
 
-	child_walls = []
-	i = -1
+	child_sigmas = []
 
-	for wall in parent_walls:
+	for sigma in parent_sigmas:
+		child_sigma = sigma * math.exp(lr * random.gauss(0, 1))
+		# Enforce upper and lower bound for child sigma
+		if sigma_lb > child_sigma:
+			child_sigma = sigma_lb
+		if sigma_ub < child_sigma:
+			child_sigma = sigma_ub
+		child_sigmas.append(child_sigma)
+
+	# occupied_walls = set(parent["walls"])
+
+	child_walls = []
+
+	for wall, child_sigma in zip(parent_walls, child_sigmas):
 		mutate_prob = random.random()
-		i+=1
-		# Useless walls have higher chance to mutate:
-		if mutate_prob >= INDIVIDUAL_WALL_MUTATION_RATE or useless_walls[i] == 1 and mutate_prob >= USELESS_WALL_MUTATION_RATE:
+
+		if mutate_prob >= INDIVIDUAL_WALL_MUTATION_RATE:
 			child_walls.append(wall)
 			continue
 
-		# Chose mutation kind:
-		mutation_kind = 3
-		m1_odds = 0.33
-		m2_odds = 0.33
-		r = random.random()
-		if r < m1_odds:
-			mutation_kind = 1
-		elif r < m1_odds + m2_odds:
-			mutation_kind = 2
+		found_valid_pos = False
+		new_wall = None
+		num_attempts = 0
 
-		fails = 0
-		# MUTATION 1: (random spot)
-		if mutation_kind == 1:
-			while fails < 10:
-				attempt = random.choice(valid_walls)
-				if attempt not in filledspaces:
-					child_walls.append(attempt)
-					filledspaces.remove(wall)
-					filledspaces.add(attempt)
-					break
-				else: 
-					fails += 1
-					if fails >= 10:
-						child_walls.append(wall)
+		while not found_valid_pos and num_attempts < DISPLACEMENT_MAX_ATTEMPTS:
+			new_wall = Point(round(wall.x + child_sigma * random.gauss(0, 1)), round(wall.y + child_sigma * random.gauss(0, 1)))
 
-		# MUTATION 2: (2x2 radius)
-		elif mutation_kind == 2:
-			while fails < 10:
-				x_offset = random.randint(-2, 2)
-				y_offset = random.randint(-2, 2)
-				attempt = wall + Point(x_offset, y_offset)
-				# if out of bounds, make the offset work in the opposite direction
-				if attempt.x < 0 or attempt.x >= PUZZLE_WIDTH: 
-					attempt.x += x_offset*(-2)
-				if attempt.y < 0 or attempt.y >= PUZZLE_HEIGHT: 
-					attempt.y += y_offset*(-2)
+			# Clamp perturbed wall position to be within the grid
+			if new_wall.x < 0:
+				new_wall.x = 0
+			elif new_wall.x >= PUZZLE_WIDTH:
+				new_wall.x = PUZZLE_WIDTH - 1
+			if new_wall.y < 0:
+				new_wall.y = 0
+			elif new_wall.y >= PUZZLE_HEIGHT:
+				new_wall.y = PUZZLE_HEIGHT - 1
 
-				if attempt not in filledspaces and PUZZLE[attempt.y][attempt.x] == TileType.SPACE:
-					child_walls.append(attempt)
-					filledspaces.remove(wall)
-					filledspaces.add(attempt)
-					break
-				else: 
-					fails += 1
-					if fails >= 10:
-						child_walls.append(wall)
+			num_attempts += 1
 
+			if PUZZLE[new_wall.y][new_wall.x] == TileType.SPACE:
+				if new_wall not in filledspaces: # make sure new wall position is not occupied
+					found_valid_pos = True
 
-		# MUTATION 3: (adjacent to other wall)
+		# If no valid position has been found after generating perturbed wall
+		# positions DISPLACEMENT_MAX_ATTEMPTS number of times, then give up and
+		# keep the current wall position. Otherwise, add the new wall position to
+		# child's walls.
+		if not found_valid_pos:
+			child_walls.append(wall)
 		else:
-			neighbors = [Point(-1,0), Point(1,0), Point(0,-1), Point(0,1), Point(-1,1), Point(1,1), Point(1,-1), Point(-1,-1)]
-			random.shuffle(neighbors)
-			filledspaces.remove(wall)	# prevents the wall from moving adjacent to itself
-			current_walls = list(filledspaces)
-			random.shuffle(current_walls)
-
-			found = False
-			for w in current_walls:	# choose a random wall
-				for n in neighbors:	# choose a random neighbor for that wall
-					attempt = w+n
-					# check if its a valid position (in bounds + no occupied + free space)
-					if attempt.x >= 0 and attempt.x < PUZZLE_WIDTH and attempt.y >= 0 and attempt.y < PUZZLE_HEIGHT: 
-						if attempt not in filledspaces and PUZZLE[attempt.y][attempt.x] == TileType.SPACE:
-							child_walls.append(attempt)
-							filledspaces.add(attempt)
-							found = True
-							break
-				if found: break
-			if not found:
-				child_walls.append(wall)
-				filledspaces.add(wall)
+			child_walls.append(new_wall)
+			filledspaces.add(new_wall) #add new wall to set so that it is not chosen again for subsequent walls in this mutation
+			filledspaces.remove(wall)
 
 	child = dict(
-		walls=child_walls
+		sigmas=child_sigmas,
+		walls=child_walls,
 	)
 
 	return child
@@ -411,15 +359,55 @@ def crossover(parent1, parent2):
 			child_b_walls.add(parent1["walls"][i % MAX_WALLS])
 		i+=1
 
-	uw = [0]*MAX_WALLS
-	return { "walls": list(child_a_walls), "useless_walls": uw}, { "walls": list(child_b_walls), "useless_walls": uw}
+	# cross sigmas
+	# maps wall to corrisponding sigma, so can find the sigma using the wall (so we only have to look at the walls to detemrine sigma)
+	parent1_map = {w: s for w, s in zip(parent1["walls"], parent1["sigmas"])}
+	parent2_map = {w: s for w, s in zip(parent2["walls"], parent2["sigmas"])}
+
+	sigma_a = []
+	for w in child_a_walls:
+		if w in parent1_map and w in parent2_map:
+		# combine sigmas of walls in both parents
+			sigma_a.append((parent1_map[w] + parent2_map[w]) / 2)
+		elif w in parent1_map:
+			# if it was from parent 1 only, take that sigma
+			sigma_a.append(parent1_map[w])
+		else:
+			# if it was from parent 2 only, take that sigma
+			sigma_a.append(parent2_map[w])
+
+	# same thing but for child b
+	sigma_b = []
+	for w in child_b_walls:
+		if w in parent1_map and w in parent2_map:
+			sigma_b.append((parent1_map[w] + parent2_map[w]) / 2)
+		elif w in parent2_map:
+			sigma_b.append(parent2_map[w])
+		else:
+			sigma_b.append(parent1_map[w])
+
+	# return walls and sigmas
+	return { "walls": list(child_a_walls), "sigmas": sigma_a }, { "walls": list(child_b_walls), "sigmas": sigma_b }
+
+
+POPULATION_SIZE = 1500
+MATING_POOL_SIZE = POPULATION_SIZE//2
+MAX_GENERATIONS = 500
+DISPLACEMENT_MAX_ATTEMPTS = 5 # maximum number of attempts to before giving up moving a wall in mutation
+SOLUTION_MUTATION_RATE = 0.5 # probablity for a solution to undergo mutation
+INDIVIDUAL_WALL_MUTATION_RATE = 0.3 # probablity for an individual wall to change its position
+SIGMA_INIT = 3 # initial value for sigma for each wall
+DIRS = [Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1)]
 
 
 def main():
 	print("\n-> Initializing with population of", POPULATION_SIZE)
 
-	population = [random_solution() for _ in range(POPULATION_SIZE)] 	# dictionary with { "walls": [], and "fitness": n }
+	population = [random_solution(sigma_init=SIGMA_INIT) for _ in range(POPULATION_SIZE)] 	# dictionary with { "walls": [], and "fitness": n }
 	generation = 0
+	max_dim = max(PUZZLE_WIDTH, PUZZLE_HEIGHT)
+	sigma_bounds = (1, max_dim // 2)
+	learning_rate = 1 / math.sqrt(max_dim)
 	best_solution = { "generation": -1, "fitness": 0 }   # highest fitness so far
 	global_start_time = time.perf_counter()
 
@@ -431,20 +419,29 @@ def main():
 	avg_fitness = []
 	max_fitness = []
 	min_fitness = []
+	avg_strategy = []
+	max_strategy = []
+	min_strategy = []
 
 	# 	Evolve!
 	while generation < MAX_GENERATIONS:
 
 		# Process previous generation
 
+		start_time = time.perf_counter()
+
 		offspring = []
 
 		avg_fitness.append(0)
 		max_fitness.append(float('-inf'))
 		min_fitness.append(float('inf'))
+		avg_strategy.append([0 for _ in range(MAX_WALLS)])
+		max_strategy.append([float('-inf') for i in range(MAX_WALLS)])
+		min_strategy.append([float('inf') for i in range(MAX_WALLS)])
 
 		# check for best solution so far + stats from previous generation
 		best = best_solution["fitness"]
+		best_in_generation = { "fitness": 0 }
 
 		for p in population:
 			fit = p["fitness"]
@@ -455,6 +452,16 @@ def main():
 				min_fitness[-1] = fit
 
 			avg_fitness[-1] += fit
+			if fit > best_in_generation["fitness"]:
+				best_in_generation = p
+
+			for i, v in enumerate(p["sigmas"]):
+				avg_strategy[-1][i] += v
+				if v > max_strategy[-1][i]:
+					max_strategy[-1][i] = v
+
+				if v < min_strategy[-1][i]:
+					min_strategy[-1][i] = v
 
 			if best_solution["generation"] == -1 or fit > best:
 				best_solution = copy.deepcopy(p)
@@ -462,14 +469,21 @@ def main():
 				new_best = best_solution["fitness"]
 				print(f"	-> Found a better solution! ({best} -> {new_best})")
 				best = new_best
-				print_puzzle(best_solution["walls"])
+
+		for i in range(MAX_WALLS):
+			avg_strategy[-1][i] = avg_strategy[-1][i] / len(population)
 
 		avg_fitness[-1] /= len(population)
 
+		#print("-> Max strategy / wall:", [round(x, 3) for x in max_strategy])
+		#print("-> Min strategy / wall:", [round(x, 3) for x in min_strategy])
+		#print("-> Avg strategy / wall:", [round(x, 3) for x in avg_strategy])
 		print(f"->  Avg fitness for gen was {avg_fitness[-1]:.4f}")
+		# print("-> Best fitness for gen was", best_in_generation["fitness"])
+		# print_puzzle(best_in_generation["walls"])
 
 		# Write to file
-		csv.write(f"{generation},{avg_fitness[-1]: .4f},{best_solution['fitness']},{best}\n")
+		csv.write(f"{generation},{avg_fitness[-1]: .4f},{best_in_generation['fitness']},{best}\n")
 		csv.flush()
 
 		if best >= math.inf:
@@ -481,9 +495,11 @@ def main():
 		generation += 1
 
 		print("\n-> Starting generation", generation)
+		# print("-> Population size:", len(population))
 		print(f"-> Best fitness so far is {best_solution['fitness']} (from gen {best_solution['generation']})")
 		print("-> Fitness calculations:", total_fitness_calculations)
 
+		# mating_pool = tournament_mps(population, offspring_size)
 		mating_pool = tournament(population)
 
 		# run crossover until mating pool is empty
@@ -496,43 +512,52 @@ def main():
 			offspring1, offspring2 = crossover(p1, p2)
 
 			# mutate and add to offspring list
-			m1 = mutate(p1)
-			m2 = mutate(p2)
 			if random.random() < SOLUTION_MUTATION_RATE:
-				offspring1 = mutate(offspring1)
+				offspring1 = mutate(offspring1, learning_rate, sigma_bounds)
 
 			if random.random() < SOLUTION_MUTATION_RATE:
-				offspring2 = mutate(offspring2)
+				offspring2 = mutate(offspring2, learning_rate, sigma_bounds)
 
 			# calculate fitness of offsprings
-			offspring1["fitness"], offspring1["useless_walls"] = get_fitness(offspring1["walls"])
-			offspring2["fitness"], offspring2["useless_walls"] = get_fitness(offspring2["walls"])
-			m1["fitness"], m1["useless_walls"] = get_fitness(m1["walls"])
-			m2["fitness"], m2["useless_walls"] = get_fitness(m2["walls"])
+			offspring1["fitness"] = get_fitness(offspring1["walls"], PUZZLE, defaultExits)
+			offspring2["fitness"] = get_fitness(offspring2["walls"], PUZZLE, defaultExits)
 
 			offspring.append(offspring1)
 			offspring.append(offspring2)
 			offspring.append(p1)
 			offspring.append(p2)
-			offspring.append(m1)
-			offspring.append(m2)
 
 		offspring.append(best_solution)	# add a copy of best solution to each generation (Elitism)
+		offspring.sort(key=lambda s: s["fitness"], reverse=True)
 
 		population = offspring[:POPULATION_SIZE]
 
+		end_time = time.perf_counter()
+
+		# print(f"-> Generation took {(end_time - start_time) * 1000.0: .3f} ms")
+
 
 	population = sorted(population, key = lambda x: x["fitness"], reverse=True)
+	# fitnesses = list(map(lambda x: x["fitness"], population))
 
 	print("===========================")
+
 	print("Total fitness calculations:", total_fitness_calculations)
+	# print("\nWorst Solution:")
+	# print_puzzle(population[-1]["walls"])
+	# print(f"Fitness: {population[-1]['fitness']}")
+
+	#print("\nBest Solution from Last Generation:")
+	#print_puzzle(population[0]["walls"])
+	#print(f"Fitness: {population[0]['fitness']}")
+
 	print(f"\nBest Solution overall: (from gen {best_solution['generation']})")
 	print_puzzle(best_solution["walls"])
 	print(f"Fitness: {best_solution['fitness']}")
+
 	print(f"\nPopulation size: {len(population)}")
 	print(f"Generations: {generation}")
 	print(f"Time elapsed: {time.perf_counter() - global_start_time: .6f} secs")
-	print(f"For {MAX_WALLS} walls, wall mutation rate was: {INDIVIDUAL_WALL_MUTATION_RATE}")
 	print("===========================")
 
 	# Store last run in csv
@@ -545,6 +570,9 @@ def main():
 			avg_fitness=avg_fitness,
 			max_fitness=max_fitness,
 			min_fitness=min_fitness,
+			avg_strategy=avg_strategy,
+			max_strategy=max_strategy,
+			min_strategy=min_strategy,
 			puzzle_name=PUZZLE_NAME
 		)
 
