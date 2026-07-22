@@ -1,10 +1,6 @@
-import os
-
 def load_puzzle(name):
 	
-	file_path = os.path.join(os.path.dirname(__file__), "puzzles", f"{name}.txt")
-
-	file = open(file_path, "r")
+	file = open("puzzles/" + name + ".txt", "r")
 
 	puzzle = {
 		"data": [],
