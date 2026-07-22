@@ -10,7 +10,7 @@ from puzzle_loader import load_puzzle
 from plot_stats import plot_statistics
 
 # Define puzzles in the /puzzles folder
-PUZZLE_NAME = "day119"
+PUZZLE_NAME = "test2"
 
 # =========================== #
 
@@ -24,10 +24,11 @@ OPTIMAL_AREA = PUZZLE_FILE["optimal"]
 # ============ PARAMETERS ============ #
 POPULATION_SIZE = 450
 MATING_POOL_SIZE = POPULATION_SIZE//3
-MAX_GENERATIONS = 600
+MAX_GENERATIONS = 300
 SOLUTION_MUTATION_RATE = 0.15 # probablity for a solution to undergo mutation
 INDIVIDUAL_WALL_MUTATION_RATE = 1/MAX_WALLS # probablity for an individual wall to change its position
 USELESS_WALL_MUTATION_RATE = 0.8
+NOVELTY_SCALE = 100
 
 # =========================== #
 
@@ -172,7 +173,7 @@ def floodfill(puzzleLayout):
 
 	return results
 
-def get_fitness(walls):
+def get_fitness(walls, occupied_flood=None):
 
 	global total_fitness_calculations
 	total_fitness_calculations += 1
@@ -183,6 +184,7 @@ def get_fitness(walls):
 
 	# create a temporary puzzle layout that counts walls as water (since they function the same)
 	fitness = len(defaultExits) * -1
+	novelty = 0 		# stores values of tiles that aren't shared by the occupied flood
 	combinedPuzzle = [row[:] for row in PUZZLE]
 	for w in walls:
 		combinedPuzzle[w.y][w.x] = TileType.WATER
@@ -207,13 +209,27 @@ def get_fitness(walls):
 			for x in range(PUZZLE_WIDTH):	# iterate over each cell
 				if flood[y][x] != -1:		# if that cell is enclosed add fitness
 					fitness+=1
+					##TODO: Have another 2d array "occupied_flood[][]" that stores a floodfill from another solution.
+					# If flood[y][x] is not shared, multiply the fitness for that tile by a constant C.
+
+					# this fitness should be stored in a "local fitness" variable to promote diversity
+					# For now, don't add the local fitness variable and just test with normal fitness as a proof of concept
+					novel_space = False
+					if occupied_flood:
+						if occupied_flood[y][x] == -1:
+							novel_space = True
+							novelty+=1
+
 					# add additional fitness for cherries, apples, bees
 					if combinedPuzzle[y][x] == TileType.CHERRY:
 						fitness+=3
+						if novel_space: novelty+=3
 					elif combinedPuzzle[y][x] == TileType.APPLE:
 						fitness+=10
+						if novel_space: novelty+=10
 					elif combinedPuzzle[y][x] == TileType.BEES:
 						fitness-=5
+						#if novel_space: novelty+=-5
 	
 
 		# Find useful walls by checking to see if it's next to an enclosed tile:
@@ -236,7 +252,7 @@ def get_fitness(walls):
 	if fitness >= OPTIMAL_AREA:
 		fitness = math.inf
 
-	return fitness, useless_walls
+	return fitness, useless_walls, novelty
 
 # Find default escapes (needed for fitness evaluation):
 defaultExits = []
@@ -246,18 +262,26 @@ for y in range(PUZZLE_HEIGHT):
 		if on_edge(Point(x,y)) and defaultFlood[y][x] != -1:
 			defaultExits.append((Point(x,y), defaultFlood[y][x]))
 
+# === TEMP FLOODFILL TO TEST IF NOVELY IS WORKING === #
+
+test_walls = [Point(0, 7), Point(0, 4), Point(0, 3), Point(0, 6), Point(0, 5), Point(7, 5)]
+combinedPuzzle = [row[:] for row in PUZZLE]
+for w in test_walls:
+	combinedPuzzle[w.y][w.x] = TileType.WATER
+test_flood = floodfill(combinedPuzzle)
+
 # ===========================  END OF FITNESS CALCULATION FUNCTIONS =========================== #
 
 #  Create a random solution that just picks from random available wall positions
 def random_solution():
 	random_wall_positions = random.sample(valid_walls, MAX_WALLS)
-	fitness, uw = get_fitness(random_wall_positions)
-	return { "walls": random_wall_positions, "fitness": fitness, "useless_walls": uw}
+	fitness, uw, novelty = get_fitness(random_wall_positions, test_flood)
+	return { "walls": random_wall_positions, "fitness": fitness, "useless_walls": uw, "novelty": novelty}
 
 #	Selection via linear ranking
 def tournament(population):
 	# Sort by fitness. First element is the lowest, last element is the highest
-	candidates = sorted(population, key = lambda x: x["fitness"])
+	candidates = sorted(population, key = lambda x: (x["novelty"] * NOVELTY_SCALE + x["fitness"]))
 	# Get the weight of each index ([1, 2, 3, 4, 5, ... n-1, n])
 	weights = range(1, len(candidates) + 1)
 	# Choose a bunch of candidates based on their weight of being picked
@@ -482,6 +506,7 @@ def main():
 
 		print("\n-> Starting generation", generation)
 		print(f"-> Best fitness so far is {best_solution['fitness']} (from gen {best_solution['generation']})")
+		print(f"-> Novelty score is {best_solution['novelty'] * NOVELTY_SCALE} Combined value is {(best_solution['novelty'] * NOVELTY_SCALE) + best_solution['fitness']}")
 		print("-> Fitness calculations:", total_fitness_calculations)
 
 		mating_pool = tournament(population)
@@ -505,10 +530,10 @@ def main():
 				offspring2 = mutate(offspring2)
 
 			# calculate fitness of offsprings
-			offspring1["fitness"], offspring1["useless_walls"] = get_fitness(offspring1["walls"])
-			offspring2["fitness"], offspring2["useless_walls"] = get_fitness(offspring2["walls"])
-			m1["fitness"], m1["useless_walls"] = get_fitness(m1["walls"])
-			m2["fitness"], m2["useless_walls"] = get_fitness(m2["walls"])
+			offspring1["fitness"], offspring1["useless_walls"], offspring1["novelty"] = get_fitness(offspring1["walls"], test_flood)
+			offspring2["fitness"], offspring2["useless_walls"], offspring2["novelty"] = get_fitness(offspring2["walls"], test_flood)
+			m1["fitness"], m1["useless_walls"], m1["novelty"] = get_fitness(m1["walls"], test_flood)
+			m2["fitness"], m2["useless_walls"], m2["novelty"] = get_fitness(m2["walls"], test_flood)
 
 			offspring.append(offspring1)
 			offspring.append(offspring2)
@@ -517,7 +542,7 @@ def main():
 			offspring.append(m1)
 			offspring.append(m2)
 
-		offspring.append(best_solution)	# add a copy of best solution to each generation (Elitism)
+		#offspring.append(best_solution)	# add a copy of best solution to each generation (Elitism)
 
 		population = offspring[:POPULATION_SIZE]
 
@@ -529,10 +554,13 @@ def main():
 	print(f"\nBest Solution overall: (from gen {best_solution['generation']})")
 	print_puzzle(best_solution["walls"])
 	print(f"Fitness: {best_solution['fitness']}")
+	print(f"Novelty: {best_solution['novelty']}")
+	
 	print(f"\nPopulation size: {len(population)}")
 	print(f"Generations: {generation}")
 	print(f"Time elapsed: {time.perf_counter() - global_start_time: .6f} secs")
 	print(f"For {MAX_WALLS} walls, wall mutation rate was: {INDIVIDUAL_WALL_MUTATION_RATE}")
+	print("[" + ", ".join(f"Point({p.x}, {p.y})" for p in best_solution["walls"]) + "]")
 	print("===========================")
 
 	# Store last run in csv
